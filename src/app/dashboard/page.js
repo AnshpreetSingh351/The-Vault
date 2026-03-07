@@ -30,6 +30,9 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
+  // 🚀 IMPORTANT: Update this variable with your LIVE Render backend URL
+  const SERVER_URL = "https://the-vault-backend.onrender.com"; 
+
   useEffect(() => {
     const savedName = localStorage.getItem("vault_user");
     if (!savedName) { router.replace('/'); return; }
@@ -40,7 +43,7 @@ export default function ChatDashboard() {
 
     const loadHistory = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/api/messages/${encodeURIComponent(activeRoom.name)}`);
+        const res = await fetch(`${SERVER_URL}/api/messages/${encodeURIComponent(activeRoom.name)}`);
         const data = await res.json();
         setChatHistory(Array.isArray(data) ? data : []);
       } catch (err) { console.error("History fetch failed"); }
@@ -48,7 +51,7 @@ export default function ChatDashboard() {
 
     const loadRooms = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/api/rooms`);
+        const res = await fetch(`${SERVER_URL}/api/rooms`);
         const data = await res.json();
         const defaults = [{ name: "General Vibes #1", password: "" }];
         const dbRooms = Array.isArray(data) ? data : [];
@@ -62,8 +65,7 @@ export default function ChatDashboard() {
     loadHistory();
     loadRooms();
 
-    const BACKEND_URL = "https://your-backend-name.onrender.com"; 
-if (!socketRef.current) socketRef.current = io(BACKEND_URL);
+    if (!socketRef.current) socketRef.current = io(SERVER_URL);
     const socket = socketRef.current;
     socket.emit('join_vault', { handle: savedName, room: activeRoom.name });
     
@@ -71,7 +73,6 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
     socket.on("receive_message", (data) => {
       if (data.room === activeRoom.name) {
           setChatHistory(prev => [...prev, data]);
-          // 🚀 Auto-mark new received messages as read
           if (data.author !== savedName) socket.emit('mark_read', { messageId: data._id, handle: savedName });
       }
     });
@@ -79,6 +80,10 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
     socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
     socket.on("user_typing", (data) => {
       if (data.room === activeRoom.name && data.handle !== savedName) setTypingStatus(data.isTyping ? data.handle : null);
+    });
+
+    socket.on("room_cleared", (roomName) => {
+        if (activeRoom.name === roomName) setChatHistory([]);
     });
 
     socket.on("room_created", (newRoom) => {
@@ -92,11 +97,11 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
 
     return () => { 
         socket.off("online_users"); socket.off("receive_message"); socket.off("message_deleted"); 
-        socket.off("user_typing"); socket.off("message_edited"); socket.off("room_created"); socket.off("room_deleted");
+        socket.off("user_typing"); socket.off("message_edited"); socket.off("room_created"); 
+        socket.off("room_deleted"); socket.off("room_cleared");
     };
-  }, [router, activeRoom.name]);
+  }, [router, activeRoom.name, SERVER_URL]);
 
-  // 🚀 NEW: Hook to mark historical messages as read when joining a room
   useEffect(() => {
     if (chatHistory.length > 0 && myHandle && socketRef.current) {
         chatHistory.forEach(msg => {
@@ -120,13 +125,13 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
 
   const handleCreateRoom = async () => {
     if (!newRoomData.name || !newRoomData.password) return alert("Fill all fields!");
-    const res = await fetch('http://localhost:3001/api/rooms', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newRoomData) });
+    const res = await fetch(`${SERVER_URL}/api/rooms`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newRoomData) });
     if (res.ok) setShowCreateModal(false);
     else alert("Error creating room.");
   };
 
   const confirmDeleteRoom = async () => {
-    const res = await fetch(`http://localhost:3001/api/rooms/${encodeURIComponent(roomToDelete)}`, { 
+    const res = await fetch(`${SERVER_URL}/api/rooms/${encodeURIComponent(roomToDelete)}`, { 
         method: 'DELETE',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ password: deletePassword })
@@ -252,7 +257,7 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
       <div className={`flex-1 flex flex-col h-full relative transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
         <div className={`border-b-[4px] border-black p-6 flex justify-between items-center z-10 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <h1 className={`text-2xl font-black uppercase italic tracking-tighter ${isDarkMode ? "text-[#B967FF]" : "text-black"}`}>{activeRoom.name}</h1>
-          <button onClick={() => { if(confirm("Clear?")) fetch(`http://localhost:3001/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
+          <button onClick={() => { if(confirm("Wipe?")) fetch(`${SERVER_URL}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
         </div>
 
         <div className={`flex-1 p-8 space-y-6 overflow-y-auto transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#f9f9f9]"}`}>
@@ -277,7 +282,7 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
                       {msg.author === myHandle && !editingId && (
                         <>
                           <button onClick={() => { setEditingId(msg._id); setEditText(msg.text); }} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#05FFA1]">✎</button>
-                          <button onClick={() => {if(confirm("Delete?")) fetch(`http://localhost:3001/api/messages/${msg._id}`, {method:'DELETE'});}} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#FF4B4B]">🗑️</button>
+                          <button onClick={() => {if(confirm("Delete?")) fetch(`${SERVER_URL}/api/messages/${msg._id}`, {method:'DELETE'});}} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#FF4B4B]">🗑️</button>
                         </>
                       )}
                   </div>
@@ -293,8 +298,6 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
                   ) : (
                     <>
                       <p className="font-bold text-lg break-all whitespace-pre-wrap leading-tight pr-10">{msg.text}</p>
-                      
-                      {/* 🚀 READ RECEIPT INDICATOR */}
                       <div className="flex justify-end items-center gap-1 mt-1 opacity-60">
                         <span className="text-[9px] font-black">
                             {msg.readBy?.length > 1 ? `Seen by ${msg.readBy.length}` : (msg.author === myHandle ? "Sent" : "")}
@@ -305,7 +308,6 @@ if (!socketRef.current) socketRef.current = io(BACKEND_URL);
                             </span>
                         )}
                       </div>
-
                       {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-3">
                               {Object.entries(msg.reactions).map(([emoji, users]) => (
