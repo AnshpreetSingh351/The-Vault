@@ -6,11 +6,11 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-app.use(cors());
+app.use(cors()); // Allows your live frontend to connect
 app.use(express.json({ limit: '10mb' })); 
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("DATABASE CONNECTED 🔌"))
+  .then(() => console.log("VAULT DATABASE CONNECTED 🔌"))
   .catch(err => console.log("DB CONNECTION ERROR:", err));
 
 // --- SCHEMAS ---
@@ -31,14 +31,13 @@ const Message = mongoose.model('Message', new mongoose.Schema({
   image: String,
   time: String,
   reactions: { type: Object, default: {} },
-  // 🚀 NEW: Array of handles who have seen this message
   readBy: { type: [String], default: [] }, 
   createdAt: { type: Date, default: Date.now }
 }));
 
 const server = http.createServer(app);
 const io = new Server(server, { 
-  cors: { origin: "http://localhost:3000" },
+  cors: { origin: "*" }, // Essential for cross-domain communication
   maxHttpBufferSize: 1e7 
 });
 const activeUsers = {}; 
@@ -134,21 +133,19 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', async (data) => {
     try {
-      // 🚀 Initialize readBy with the author
       const savedMsg = await new Message({ ...data, reactions: {}, readBy: [data.author] }).save(); 
       io.emit('receive_message', savedMsg); 
     } catch (err) { console.error("❌ SAVE ERROR:", err); }
   });
 
-  // 🚀 NEW: Mark Message as Read logic
   socket.on('mark_read', async ({ messageId, handle }) => {
     try {
       const updated = await Message.findByIdAndUpdate(
         messageId, 
-        { $addToSet: { readBy: handle } }, // Prevents duplicates
+        { $addToSet: { readBy: handle } }, 
         { new: true }
       );
-      if (updated) io.emit('message_edited', updated); // Broadcast update
+      if (updated) io.emit('message_edited', updated); 
     } catch (err) { console.error("Read Error", err); }
   });
 
@@ -161,7 +158,9 @@ io.on('connection', (socket) => {
       if (reactions[emoji].includes(handle)) {
         reactions[emoji] = reactions[emoji].filter(u => u !== handle);
         if (reactions[emoji].length === 0) delete reactions[emoji];
-      } else { reactions[emoji].push(handle); }
+      } else {
+        reactions[emoji].push(handle);
+      }
       const updated = await Message.findByIdAndUpdate(messageId, { reactions }, { new: true });
       io.emit('message_edited', updated); 
     } catch (err) { console.error("Reaction Error", err); }
@@ -173,7 +172,8 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3001; // Use the environment port or 3001
+// 🚀 PRODUCTION READY: Use process.env.PORT for Render
+const PORT = process.env.PORT || 3001; 
 server.listen(PORT, () => {
   console.log(`SERVER LIVE ON PORT ${PORT} 🚀`);
 });
