@@ -30,7 +30,7 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
-  // 🚀 IMPORTANT: Update this variable with your LIVE Render backend URL
+  // 🚀 PRODUCTION SETTING: Update this to your live Render backend address
   const SERVER_URL = "https://the-vault-backend.onrender.com"; 
 
   useEffect(() => {
@@ -65,6 +65,7 @@ export default function ChatDashboard() {
     loadHistory();
     loadRooms();
 
+    // 🚀 FIXED: Socket now uses the global SERVER_URL
     if (!socketRef.current) socketRef.current = io(SERVER_URL);
     const socket = socketRef.current;
     socket.emit('join_vault', { handle: savedName, room: activeRoom.name });
@@ -257,7 +258,7 @@ export default function ChatDashboard() {
       <div className={`flex-1 flex flex-col h-full relative transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
         <div className={`border-b-[4px] border-black p-6 flex justify-between items-center z-10 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <h1 className={`text-2xl font-black uppercase italic tracking-tighter ${isDarkMode ? "text-[#B967FF]" : "text-black"}`}>{activeRoom.name}</h1>
-          <button onClick={() => { if(confirm("Wipe?")) fetch(`${SERVER_URL}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
+          <button onClick={() => { if(confirm("Clear?")) fetch(`${SERVER_URL}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
         </div>
 
         <div className={`flex-1 p-8 space-y-6 overflow-y-auto transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#f9f9f9]"}`}>

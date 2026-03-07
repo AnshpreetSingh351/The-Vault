@@ -6,14 +6,16 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-app.use(cors()); // Allows your live frontend to connect
+
+// 🚀 LIVE UPDATE: Allow all origins so your deployed frontend can connect
+app.use(cors()); 
 app.use(express.json({ limit: '10mb' })); 
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("VAULT DATABASE CONNECTED 🔌"))
   .catch(err => console.log("DB CONNECTION ERROR:", err));
 
-// --- SCHEMAS ---
+// --- SCHEMAS (UNCHANGED) ---
 const User = mongoose.model('User', new mongoose.Schema({
   username: { type: String, unique: true, required: true },
   password: { type: String, required: true }
@@ -36,13 +38,19 @@ const Message = mongoose.model('Message', new mongoose.Schema({
 }));
 
 const server = http.createServer(app);
+
+// 🚀 LIVE UPDATE: Ensure Socket.io allows connections from the web
 const io = new Server(server, { 
-  cors: { origin: "*" }, // Essential for cross-domain communication
+  cors: { 
+    origin: "*", // Allows any frontend URL to connect to your vault
+    methods: ["GET", "POST"]
+  },
   maxHttpBufferSize: 1e7 
 });
+
 const activeUsers = {}; 
 
-// --- API ROUTES ---
+// --- API ROUTES (UNCHANGED) ---
 
 app.get('/api/rooms', async (req, res) => {
   try {
@@ -117,7 +125,7 @@ app.delete('/api/messages/clear/:room', async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Clear failed" }); }
 });
 
-// --- SOCKET LOGIC ---
+// --- SOCKET LOGIC (UNCHANGED) ---
 io.on('connection', (socket) => {
   socket.on('join_vault', (data) => {
     const handle = typeof data === 'object' ? data.handle : data;
@@ -172,7 +180,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// 🚀 PRODUCTION READY: Use process.env.PORT for Render
+// --- PORT (PRODUCTION READY) ---
 const PORT = process.env.PORT || 3001; 
 server.listen(PORT, () => {
   console.log(`SERVER LIVE ON PORT ${PORT} 🚀`);
