@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  output: 'export', // 🚀 This creates the 'out' folder Render needs
+  images: {
+    unoptimized: true, // Required for static export images
+  },
 };
 
 export default nextConfig;
