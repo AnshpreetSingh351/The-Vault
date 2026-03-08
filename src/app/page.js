@@ -4,13 +4,14 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export default function IdentityPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    // Check if a user is already authenticated in this browser
     const user = localStorage.getItem("vault_user");
     if (user) {
       router.push('/dashboard');
@@ -21,7 +22,7 @@ export default function IdentityPage() {
     if (!username || !password) return alert("Fill in all fields!");
 
     try {
-      const response = await fetch(`http://localhost:3001/api/${action}`, {
+      const response = await fetch(`${API}/api/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -36,7 +37,7 @@ export default function IdentityPage() {
         alert(data.error); 
       }
     } catch (error) {
-      alert("Server error! Is your backend running on port 3001?");
+      alert("Server error! Is your backend running?");
     }
   };
 
