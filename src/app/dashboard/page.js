@@ -349,12 +349,28 @@ export default function ChatDashboard() {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
-    if (file.size > 10 * 1024 * 1024) return alert("Image must be under 10MB!");
 
     setUploadingImage(true);
     try {
+      // Compress image via canvas before uploading — keeps it well under any server limit
+      const compressed = await new Promise((resolve) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxW = 1200;
+          const scale = img.width > maxW ? maxW / img.width : 1;
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(objectUrl);
+          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.75);
+        };
+        img.src = objectUrl;
+      });
+
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('image', compressed, 'image.jpg');
       const res = await fetch(`${API}/api/upload/image`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
