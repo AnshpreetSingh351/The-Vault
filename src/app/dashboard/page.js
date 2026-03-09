@@ -16,10 +16,8 @@ const EMOJI_LIST = [
   "💬","📢","🚀","🌈","⚡","💥","🎯","🏆","💎","🕹️",
 ];
 
-// Tick component: single=sending, double grey=delivered, double blue=seen
 function MessageTicks({ status }) {
   if (status === 'sending') {
-    // Single grey tick
     return (
       <span className="inline-flex items-center ml-1 opacity-70" title="Sending">
         <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
@@ -29,7 +27,6 @@ function MessageTicks({ status }) {
     );
   }
   if (status === 'delivered') {
-    // Double grey tick
     return (
       <span className="inline-flex items-center ml-1 opacity-70" title="Delivered">
         <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
@@ -40,7 +37,6 @@ function MessageTicks({ status }) {
     );
   }
   if (status === 'seen') {
-    // Double blue tick
     return (
       <span className="inline-flex items-center ml-1" title="Seen">
         <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
@@ -56,7 +52,6 @@ function MessageTicks({ status }) {
 function getTickStatus(msg, myHandle) {
   if (!msg._id || msg._id.startsWith('temp_')) return 'sending';
   if (!msg.seenBy || msg.seenBy.length <= 1) return 'delivered';
-  // seen = at least one person OTHER than the author has seen it
   const othersWhoSaw = (msg.seenBy || []).filter(u => u !== myHandle);
   if (othersWhoSaw.length > 0) return 'seen';
   return 'delivered';
@@ -124,6 +119,7 @@ export default function ChatDashboard() {
   const videoInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const audioCtxRef = useRef(null);
+  const myHandleRef = useRef("");
 
   const [mounted, setMounted] = useState(false);
   const [myHandle, setMyHandle] = useState("");
@@ -139,6 +135,7 @@ export default function ChatDashboard() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [unreadRooms, setUnreadRooms] = useState(new Set());
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   const [rooms, setRooms] = useState([]);
@@ -149,6 +146,7 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
+  // Close emoji picker on outside click
   useEffect(() => {
     const handler = (e) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) setShowEmojiPicker(false);
@@ -157,24 +155,18 @@ export default function ChatDashboard() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Mount: read localStorage, set handle — DO NOT reset chatHistory here
   useEffect(() => {
     setMounted(true);
     const savedName = localStorage.getItem("vault_user");
     if (!savedName) { router.replace('/'); return; }
+    myHandleRef.current = savedName;
     setMyHandle(savedName);
     const savedTheme = localStorage.getItem("vault_theme");
     if (savedTheme === "dark") setIsDarkMode(true);
-
-    // Disconnect any old socket on fresh login so it reconnects cleanly
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    // Reset chat state on fresh login
-    setChatHistory([]);
-    setActiveRoom({ name: "General Vibes #1" });
   }, [router]);
 
+  // Socket + data: runs when handle or room changes
   useEffect(() => {
     if (!myHandle) return;
 
@@ -200,14 +192,13 @@ export default function ChatDashboard() {
     loadRooms();
     setUnreadRooms(prev => { const next = new Set(prev); next.delete(activeRoom.name); return next; });
 
-    // Always create a fresh socket connection
+    // Create socket if needed
     if (!socketRef.current || !socketRef.current.connected) {
-      socketRef.current = io(API, { forceNew: true });
+      socketRef.current = io(API, { forceNew: false });
     }
     const socket = socketRef.current;
-    socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
 
-    // Mark messages as seen when joining room
+    socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
     socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
 
     socket.on("online_users", (users) => setOnlineUsers(users));
@@ -216,19 +207,16 @@ export default function ChatDashboard() {
       if (data.room === activeRoom.name) {
         setChatHistory(prev => [...prev, data]);
         socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
-        // Only play sound if message is from someone else (not while you're chatting)
         if (data.author !== myHandle) playNotification();
       } else {
         setUnreadRooms(prev => new Set([...prev, data.room]));
       }
     });
 
-    // Server confirms our message was saved — replace temp with real
     socket.on("message_delivered", ({ tempId, message: savedMsg }) => {
       setChatHistory(prev => prev.map(m => m._id === tempId ? savedMsg : m));
     });
 
-    // Update seenBy on any message
     socket.on("message_seen_update", ({ _id, seenBy }) => {
       setChatHistory(prev => prev.map(m => m._id === _id ? { ...m, seenBy } : m));
     });
@@ -262,7 +250,6 @@ export default function ChatDashboard() {
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') ctx.resume();
 
-      // Punchy pop/bubble notification sound — higher volume
       const playTone = (freq, startTime, duration, gainVal) => {
         const osc = ctx.createOscillator();
         const gainNode = ctx.createGain();
@@ -297,14 +284,14 @@ export default function ChatDashboard() {
     socketRef.current.emit("typing", { room: activeRoom.name, handle: myHandle, isTyping: true });
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socketRef.current.emit("typing", { room: activeRoom.name, handle: myHandle, isTyping: false });
+      socketRef.current?.emit("typing", { room: activeRoom.name, handle: myHandle, isTyping: false });
     }, 2000);
   };
 
   const handleCreateRoom = async () => {
     if (!newRoomData.name || !newRoomData.password) return alert("Fill all fields!");
     const res = await fetch(`${API}/api/rooms`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRoomData) });
-    if (res.ok) setShowCreateModal(false);
+    if (res.ok) { setShowCreateModal(false); setNewRoomData({ name: "", password: "" }); }
     else alert("Error creating room.");
   };
 
@@ -342,36 +329,35 @@ export default function ChatDashboard() {
     socketRef.current.emit("react_message", { messageId, emoji, handle: myHandle, room: activeRoom.name });
   };
 
-  const handleImageUpload = (e) => {
+  // IMAGE: upload to Cloudinary via HTTP, then send URL via socket
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
+    if (file.size > 10 * 1024 * 1024) return alert("Image must be under 10MB!");
 
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      // Compress image using canvas — max 800px wide, quality 0.7
-      const canvas = document.createElement('canvas');
-      const maxW = 800;
-      const scale = img.width > maxW ? maxW / img.width : 1;
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const compressed = canvas.toDataURL('image/jpeg', 0.7);
-      URL.revokeObjectURL(objectUrl);
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch(`${API}/api/upload/image`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Upload failed');
+      const { url } = await res.json();
 
       const tempId = `temp_${Date.now()}`;
       const tempMsg = {
         _id: tempId, room: activeRoom.name, author: myHandle,
-        image: compressed,
+        image: url,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         seenBy: [myHandle]
       };
       setChatHistory(prev => [...prev, tempMsg]);
       socketRef.current.emit("send_message", { ...tempMsg, tempId });
-    };
-    img.src = objectUrl;
+    } catch (err) {
+      alert("Image upload failed. Try a smaller image.");
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleVideoUpload = async (e) => {
@@ -386,7 +372,12 @@ export default function ChatDashboard() {
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
       const tempId = `temp_${Date.now()}`;
-      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, video: url, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
+      const tempMsg = {
+        _id: tempId, room: activeRoom.name, author: myHandle,
+        video: url,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        seenBy: [myHandle]
+      };
       setChatHistory(prev => [...prev, tempMsg]);
       socketRef.current.emit("send_message", { ...tempMsg, tempId });
     } catch (err) {
@@ -401,7 +392,6 @@ export default function ChatDashboard() {
     if (message.trim() !== "" && socketRef.current) {
       const tempId = `temp_${Date.now()}`;
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      // Add optimistically with temp ID (single tick = sending)
       const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, text: message, time, seenBy: [myHandle] };
       setChatHistory(prev => [...prev, tempMsg]);
       socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, text: message, time, tempId });
@@ -496,7 +486,7 @@ export default function ChatDashboard() {
           <div className="flex gap-2 shrink-0 ml-2">
             <button onClick={() => setSoundEnabled(prev => !prev)}
               className={`text-[8px] font-black border-2 border-black px-2 py-1 transition-all ${soundEnabled ? (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black") : "bg-[#FF4B4B] text-white"}`}
-              title={soundEnabled ? "Mute notifications" : "Unmute notifications"}>
+              title={soundEnabled ? "Mute" : "Unmute"}>
               {soundEnabled ? "🔔" : "🔕"}
             </button>
             <button onClick={() => { if (confirm("Clear all messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, { method: 'DELETE' }); }}
@@ -535,7 +525,7 @@ export default function ChatDashboard() {
 
                   <p className={`text-[9px] sm:text-[10px] font-black uppercase mb-1 ${isDarkMode ? "text-[#05FFA1]" : "opacity-50"}`}>{msg.author} • {msg.time}</p>
 
-                  {msg.image && <img src={msg.image} className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />}
+                  {msg.image && <img src={msg.image} alt="img" className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />}
                   {msg.video && <video src={msg.video} controls className="mb-2 border-2 border-black w-full max-h-48 sm:max-h-64 rounded-sm bg-black" />}
 
                   {editingId === msg._id ? (
@@ -552,13 +542,11 @@ export default function ChatDashboard() {
                       {msg.text && (
                         <p className="font-bold text-sm sm:text-base lg:text-lg break-words whitespace-pre-wrap leading-tight pr-2">
                           {msg.text}
-                          {/* Ticks inline after text — only for sender */}
                           {msg.author === myHandle && (
                             <MessageTicks status={getTickStatus(msg, myHandle)} />
                           )}
                         </p>
                       )}
-                      {/* Ticks for image/video messages */}
                       {(msg.image || msg.video) && msg.author === myHandle && (
                         <div className="flex justify-end mt-1">
                           <MessageTicks status={getTickStatus(msg, myHandle)} />
@@ -610,10 +598,10 @@ export default function ChatDashboard() {
             )}
           </AnimatePresence>
 
-          {uploadingVideo && (
+          {(uploadingVideo || uploadingImage) && (
             <div className={`mb-2 p-2 border-2 border-black text-[10px] font-black uppercase flex items-center gap-2 ${isDarkMode ? "bg-[#222] text-[#05FFA1]" : "bg-[#f0f0f0] text-black"}`}>
               <div className="w-2 h-2 rounded-full bg-[#B967FF] animate-pulse" />
-              Uploading video...
+              {uploadingImage ? "Uploading image..." : "Uploading video..."}
             </div>
           )}
 
@@ -621,8 +609,8 @@ export default function ChatDashboard() {
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
             <input type="file" ref={videoInputRef} onChange={handleVideoUpload} className="hidden" accept="video/*" />
 
-            <button onClick={() => fileInputRef.current.click()}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
+            <button onClick={() => fileInputRef.current.click()} disabled={uploadingImage}
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
 
             <button onClick={() => videoInputRef.current.click()} disabled={uploadingVideo}
               className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 ${isDarkMode ? "bg-[#222] text-white hover:bg-[#B967FF]" : "bg-white hover:bg-[#B967FF] hover:text-white"}`}>🎥</button>

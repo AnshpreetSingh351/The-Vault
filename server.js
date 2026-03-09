@@ -16,15 +16,11 @@ cloudinary.config({
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Only video files allowed'));
-  }
 });
 
 mongoose.connect(process.env.MONGO_URI)
@@ -49,7 +45,6 @@ const Message = mongoose.model('Message', new mongoose.Schema({
   video: String,
   time: String,
   reactions: { type: Object, default: {} },
-  // 'sent' = saved to DB, 'seen' = recipient opened the room
   seenBy: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 }));
@@ -57,19 +52,32 @@ const Message = mongoose.model('Message', new mongoose.Schema({
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL || "http://localhost:3000" },
-  maxHttpBufferSize: 5e7  // 50MB
+  maxHttpBufferSize: 5e7
 });
 
-// Track socket → { handle, room }
-const activeUsers = {};      // socketId → handle
-const userRooms = {};        // socketId → current room
+const activeUsers = {};
+const userRooms = {};
 
+// Upload IMAGE to Cloudinary via HTTP (not socket)
+app.post('/api/upload/image', upload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+  const uploadStream = cloudinary.uploader.upload_stream(
+    { resource_type: 'image', folder: 'the-vault' },
+    (error, result) => {
+      if (error) { console.error('Cloudinary image error:', error); return res.status(500).json({ error: 'Upload failed' }); }
+      res.json({ url: result.secure_url });
+    }
+  );
+  streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+});
+
+// Upload VIDEO to Cloudinary via HTTP
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
   const uploadStream = cloudinary.uploader.upload_stream(
     { resource_type: 'video', folder: 'the-vault' },
     (error, result) => {
-      if (error) return res.status(500).json({ error: 'Upload to Cloudinary failed' });
+      if (error) { console.error('Cloudinary video error:', error); return res.status(500).json({ error: 'Upload failed' }); }
       res.json({ url: result.secure_url });
     }
   );
@@ -160,13 +168,11 @@ io.on('connection', (socket) => {
   socket.on('join_vault', async (data) => {
     const handle = typeof data === 'object' ? data.handle : data;
     const room = (typeof data === 'object' ? data.room : null) || "General Vibes #1";
-
     activeUsers[socket.id] = handle;
     userRooms[socket.id] = room;
     socket.join(room);
     io.emit('online_users', Object.values(activeUsers));
 
-    // Mark all unread messages in this room as seen by this user
     try {
       const unseen = await Message.find({ room, seenBy: { $ne: handle }, author: { $ne: handle } });
       if (unseen.length > 0) {
@@ -174,7 +180,6 @@ io.on('connection', (socket) => {
           { room, seenBy: { $ne: handle }, author: { $ne: handle } },
           { $addToSet: { seenBy: handle } }
         );
-        // Notify room that these messages are now seen
         const updatedMsgs = await Message.find({ _id: { $in: unseen.map(m => m._id) } });
         updatedMsgs.forEach(msg => io.to(room).emit('message_seen_update', { _id: msg._id, seenBy: msg.seenBy }));
       }
@@ -187,14 +192,10 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', async (data) => {
     try {
-      // Message starts with author already in seenBy (they sent it)
       const savedMsg = await new Message({ ...data, reactions: {}, seenBy: [data.author] }).save();
-      // Emit to sender first with 'sent' status confirmed (double tick)
       socket.emit('message_delivered', { tempId: data.tempId, message: savedMsg });
-      // Broadcast to room
       socket.to(data.room).emit('receive_message', savedMsg);
 
-      // Check if any other users are currently in this room — mark as seen immediately
       const roomSockets = await io.in(data.room).fetchSockets();
       const othersInRoom = roomSockets
         .filter(s => s.id !== socket.id)
@@ -209,7 +210,6 @@ io.on('connection', (socket) => {
     } catch (err) { console.error("❌ SAVE ERROR:", err); }
   });
 
-  // Client tells server user opened/is viewing a room
   socket.on('mark_seen', async ({ room, handle }) => {
     try {
       await Message.updateMany(
