@@ -56,7 +56,7 @@ export default function ChatDashboard() {
         const dbRooms = Array.isArray(data) ? data : [];
         setRooms([...defaults, ...dbRooms.filter(r => r.name !== "General Vibes #1")]);
       } catch (err) { 
-        console.error("Room fetch error. Ensure server is running.");
+        console.error("Room fetch error. Ensure server is running on Port 3001.");
         setRooms([{ name: "General Vibes #1", password: "" }]);
       }
     };
@@ -99,6 +99,11 @@ export default function ChatDashboard() {
   }, [router, activeRoom.name]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
+
+  const handleExit = () => {
+    localStorage.removeItem("vault_user");
+    router.push("/");
+  };
 
   const handleTyping = () => {
     if (!socketRef.current) return;
@@ -207,7 +212,7 @@ export default function ChatDashboard() {
       <div className={`w-80 border-r-[4px] border-black p-6 flex flex-col z-20 h-full transition-colors duration-500 ${isDarkMode ? "bg-[#161616] shadow-[4px_0px_0px_0px_rgba(5,255,161,0.1)]" : "bg-white shadow-[4px_0px_0px_0px_rgba(0,0,0,1)]"}`}>
         <div className="flex justify-between items-center mb-2 border-b-[4px] border-black pb-2">
           <h2 className="text-2xl font-black italic uppercase tracking-tighter">Spaces</h2>
-          <button onClick={toggleTheme} className={`p-2 rounded-full border-2 border-black transition-all ${isDarkMode ? "bg-[#FFD700]" : "bg-[#2D3436]"}`}>{isDarkMode ? "☀️" : "🌙"}</button>
+          <button onClick={toggleTheme} className={`p-2 rounded-full border-2 border-black transition-all hover:scale-110 active:scale-95 ${isDarkMode ? "bg-[#FFD700]" : "bg-[#2D3436]"}`}>{isDarkMode ? "☀️" : "🌙"}</button>
         </div>
         <p className={`mb-4 text-[10px] font-bold p-1 border-2 border-black bg-[#05FFA1] text-black uppercase text-center`}>ID: {myHandle}</p>
         <button onClick={() => setShowCreateModal(true)} className={`mb-6 w-full border-[3px] border-black p-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#B967FF] hover:text-white transition-all`}>+ Build New Space</button>
@@ -243,7 +248,12 @@ export default function ChatDashboard() {
       <div className={`flex-1 flex flex-col h-full relative transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
         <div className={`border-b-[4px] border-black p-6 flex justify-between items-center z-10 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <h1 className={`text-2xl font-black uppercase italic tracking-tighter ${isDarkMode ? "text-[#B967FF]" : "text-black"}`}>{activeRoom.name}</h1>
-          <button onClick={() => { if(confirm("Wipe messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
+          <div className="flex gap-4">
+              <button onClick={() => { if(confirm("Clear?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, {method:'DELETE'}); }} className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
+              
+              {/* 🚀 NEW EXIT BUTTON */}
+              <button onClick={handleExit} className="text-[8px] font-black bg-black text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:bg-[#FF4B4B] transition-all">EXIT</button>
+          </div>
         </div>
 
         <div className={`flex-1 p-8 space-y-6 overflow-y-auto transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#f9f9f9]"}`}>
@@ -316,7 +326,7 @@ export default function ChatDashboard() {
 
         <div className={`p-6 border-t-[4px] border-black flex gap-4 items-center z-10 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-          <button onClick={() => fileInputRef.current.click()} className={`border-[3px] border-black p-3 hover:bg-[#01CDFE] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
+          <button onClick={() => fileInputRef.current.click()} className={`border-[3px] border-black p-3 hover:bg-[#01CDFE] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-1 active:shadow-none ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
           
           <input type="text" value={message} onChange={(e) => { setMessage(e.target.value); handleTyping(); }} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} placeholder="Type a message..." 
             className={`flex-1 border-[3px] border-black p-4 font-bold outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${isDarkMode ? "bg-[#222] text-white placeholder-gray-500" : "bg-white text-black"}`} />
