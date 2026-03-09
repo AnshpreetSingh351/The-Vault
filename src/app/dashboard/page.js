@@ -352,19 +352,25 @@ export default function ChatDashboard() {
 
     setUploadingImage(true);
     try {
-      // Compress image via canvas before uploading — keeps it well under any server limit
-      const compressed = await new Promise((resolve) => {
+      // Compress image via canvas before uploading
+      const compressed = await new Promise((resolve, reject) => {
         const img = new Image();
         const objectUrl = URL.createObjectURL(file);
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image load failed')); };
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxW = 1200;
-          const scale = img.width > maxW ? maxW / img.width : 1;
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          URL.revokeObjectURL(objectUrl);
-          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.75);
+          try {
+            const canvas = document.createElement('canvas');
+            const maxW = 1200;
+            const scale = img.width > maxW ? maxW / img.width : 1;
+            canvas.width = Math.floor(img.width * scale);
+            canvas.height = Math.floor(img.height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(objectUrl);
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Canvas compression failed'));
+            }, 'image/jpeg', 0.75);
+          } catch (err) { reject(err); }
         };
         img.src = objectUrl;
       });
@@ -372,8 +378,9 @@ export default function ChatDashboard() {
       const formData = new FormData();
       formData.append('image', compressed, 'image.jpg');
       const res = await fetch(`${API}/api/upload/image`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `Server error ${res.status}`);
+      const { url } = json;
 
       const tempId = `temp_${Date.now()}`;
       const tempMsg = {
@@ -385,10 +392,12 @@ export default function ChatDashboard() {
       setChatHistory(prev => [...prev, tempMsg]);
       socketRef.current.emit("send_message", { ...tempMsg, tempId });
     } catch (err) {
-      alert("Image upload failed. Try a smaller image.");
+      console.error("Image upload error:", err);
+      alert("Image upload failed: " + err.message);
     } finally {
       setUploadingImage(false);
     }
+  };
   };
 
   const handleVideoUpload = async (e) => {
@@ -662,4 +671,4 @@ export default function ChatDashboard() {
       </div>
     </main>
   );
-}
+
