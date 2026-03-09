@@ -394,7 +394,7 @@ export default function ChatDashboard() {
         seenBy: [myHandle]
       };
       setChatHistory(prev => [...prev, tempMsg]);
-      socketRef.current.emit("send_message", { ...tempMsg, tempId });
+      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, image: tempMsg.image, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
     } catch (err) {
       console.error("Image upload error:", err);
       alert("Image upload failed: " + err.message);
@@ -422,7 +422,7 @@ export default function ChatDashboard() {
         seenBy: [myHandle]
       };
       setChatHistory(prev => [...prev, tempMsg]);
-      socketRef.current.emit("send_message", { ...tempMsg, tempId });
+      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, video: tempMsg.video, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
     } catch (err) {
       alert("Video upload failed.");
     } finally {
