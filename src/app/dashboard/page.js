@@ -233,7 +233,11 @@ export default function ChatDashboard() {
 
     const handleReceive = (data) => {
       if (data.room === activeRoom.name) {
-        setChatHistory(prev => [...prev, data]);
+        // Skip if sender — they already have it via message_delivered
+        setChatHistory(prev => {
+          if (prev.some(m => m._id === data._id)) return prev;
+          return [...prev, data];
+        });
         socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
         if (data.author !== myHandle) playNotification();
       } else {

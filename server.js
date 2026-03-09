@@ -194,7 +194,7 @@ io.on('connection', (socket) => {
     try {
       const savedMsg = await new Message({ ...data, reactions: {}, seenBy: [data.author] }).save();
       socket.emit('message_delivered', { tempId: data.tempId, message: savedMsg });
-      socket.to(data.room).emit('receive_message', savedMsg);
+      io.to(data.room).emit('receive_message', savedMsg);
 
       const roomSockets = await io.in(data.room).fetchSockets();
       const othersInRoom = roomSockets
