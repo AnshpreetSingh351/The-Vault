@@ -7,7 +7,6 @@ import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-// Sidebar extracted as a proper standalone component outside ChatDashboard
 function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose }) {
   return (
     <div className="flex flex-col h-full">
@@ -87,6 +86,7 @@ export default function ChatDashboard() {
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const [mounted, setMounted] = useState(false);
   const [myHandle, setMyHandle] = useState("");
   const [activeRoom, setActiveRoom] = useState({ name: "General Vibes #1" });
   const [message, setMessage] = useState("");
@@ -106,13 +106,20 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
+  // First effect: just handle mount + auth check
   useEffect(() => {
+    setMounted(true);
     const savedName = localStorage.getItem("vault_user");
     if (!savedName) { router.replace('/'); return; }
     setMyHandle(savedName);
 
     const savedTheme = localStorage.getItem("vault_theme");
     if (savedTheme === "dark") setIsDarkMode(true);
+  }, [router]);
+
+  // Second effect: load data + socket — only after we have a handle
+  useEffect(() => {
+    if (!myHandle) return;
 
     const loadHistory = async () => {
       try {
@@ -139,7 +146,7 @@ export default function ChatDashboard() {
 
     if (!socketRef.current) socketRef.current = io(API);
     const socket = socketRef.current;
-    socket.emit('join_vault', { handle: savedName, room: activeRoom.name });
+    socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
 
     socket.on("online_users", (users) => setOnlineUsers(users));
     socket.on("receive_message", (data) => {
@@ -148,7 +155,7 @@ export default function ChatDashboard() {
     socket.on("message_deleted", (id) => setChatHistory(prev => prev.filter(m => m._id !== id)));
     socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
     socket.on("user_typing", (data) => {
-      if (data.room === activeRoom.name && data.handle !== savedName) setTypingStatus(data.isTyping ? data.handle : null);
+      if (data.room === activeRoom.name && data.handle !== myHandle) setTypingStatus(data.isTyping ? data.handle : null);
     });
     socket.on("room_cleared", (roomName) => {
       if (activeRoom.name === roomName) setChatHistory([]);
@@ -166,7 +173,7 @@ export default function ChatDashboard() {
       socket.off("user_typing"); socket.off("message_edited"); socket.off("room_created");
       socket.off("room_deleted"); socket.off("room_cleared");
     };
-  }, [router, activeRoom.name]);
+  }, [myHandle, activeRoom.name]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
 
@@ -263,7 +270,10 @@ export default function ChatDashboard() {
     setEditingId(null);
   };
 
-  if (!myHandle) return <div className={`h-screen ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#FFFBEB]"}`} />;
+  // Don't render anything until mounted (avoids SSR/localStorage mismatch)
+  if (!mounted) return <div className="h-screen bg-[#FFFBEB]" />;
+  // If mounted but no handle, router.replace('/') is already called — show nothing
+  if (!myHandle) return <div className="h-screen bg-[#FFFBEB]" />;
 
   const sidebarProps = {
     rooms, activeRoom, onJoin: attemptJoin,
@@ -336,17 +346,17 @@ export default function ChatDashboard() {
         )}
       </AnimatePresence>
 
-      {/* Desktop sidebar — always visible */}
-      <div className={`hidden md:flex w-72 lg:w-80 border-r-[4px] border-black p-5 lg:p-6 flex-col z-20 h-full transition-colors duration-500 shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+      {/* Desktop sidebar */}
+      <div className={`hidden md:flex w-72 lg:w-80 border-r-[4px] border-black p-5 lg:p-6 flex-col z-20 h-full shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
         <Sidebar {...sidebarProps} showClose={false} />
       </div>
 
       {/* Main chat */}
-      <div className={`flex-1 flex flex-col h-full relative transition-colors duration-500 min-w-0 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
+      <div className={`flex-1 flex flex-col h-full min-w-0 transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
 
         {/* Header */}
-        <div className={`border-b-[4px] border-black px-3 py-3 sm:px-5 sm:py-4 flex justify-between items-center z-10 shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className={`border-b-[4px] border-black px-3 py-3 sm:px-5 sm:py-4 flex justify-between items-center shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
               className={`md:hidden shrink-0 border-[3px] border-black px-2 py-1.5 font-black text-base leading-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-all ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
@@ -450,7 +460,7 @@ export default function ChatDashboard() {
         </div>
 
         {/* Input bar */}
-        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black flex gap-2 items-center z-10 shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black flex gap-2 items-center shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
           <button
             onClick={() => fileInputRef.current.click()}
