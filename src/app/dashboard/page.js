@@ -166,16 +166,49 @@ export default function ChatDashboard() {
     if (savedTheme === "dark") setIsDarkMode(true);
   }, [router]);
 
-  // Socket + data: runs when handle or room changes
+  // Socket init — runs ONCE when myHandle is set
+  useEffect(() => {
+    if (!myHandle) return;
+    if (!socketRef.current || !socketRef.current.connected) {
+      socketRef.current = io(API, { forceNew: false });
+    }
+    const socket = socketRef.current;
+
+    socket.on("online_users", (users) => setOnlineUsers(users));
+    socket.on("message_delivered", ({ tempId, message: savedMsg }) => {
+      setChatHistory(prev => prev.map(m => m._id === tempId ? savedMsg : m));
+    });
+    socket.on("message_seen_update", ({ _id, seenBy }) => {
+      setChatHistory(prev => prev.map(m => m._id === _id ? { ...m, seenBy } : m));
+    });
+    socket.on("message_deleted", (id) => setChatHistory(prev => prev.filter(m => m._id !== id)));
+    socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
+    socket.on("room_created", (newRoom) => setRooms(prev => prev.find(r => r.name === newRoom.name) ? prev : [...prev, newRoom]));
+    socket.on("room_deleted", (roomName) => {
+      setRooms(prev => prev.filter(r => r.name !== roomName));
+      setActiveRoom(current => current.name === roomName ? { name: "General Vibes #1", password: "" } : current);
+    });
+
+    return () => {
+      socket.off("online_users"); socket.off("message_delivered"); socket.off("message_seen_update");
+      socket.off("message_deleted"); socket.off("message_edited");
+      socket.off("room_created"); socket.off("room_deleted");
+    };
+  }, [myHandle]);
+
+  // Room join + history — runs when room changes
   useEffect(() => {
     if (!myHandle) return;
 
     const loadHistory = async () => {
       try {
         const res = await fetch(`${API}/api/messages/${encodeURIComponent(activeRoom.name)}`);
+        if (!res.ok) return;
         const data = await res.json();
-        setChatHistory(Array.isArray(data) ? data : []);
-      } catch (err) { console.error("History fetch failed"); }
+        if (Array.isArray(data)) setChatHistory(data);
+      } catch (err) {
+        console.error("History fetch failed — keeping existing chat");
+      }
     };
 
     const loadRooms = async () => {
@@ -192,18 +225,13 @@ export default function ChatDashboard() {
     loadRooms();
     setUnreadRooms(prev => { const next = new Set(prev); next.delete(activeRoom.name); return next; });
 
-    // Create socket if needed
-    if (!socketRef.current || !socketRef.current.connected) {
-      socketRef.current = io(API, { forceNew: false });
-    }
     const socket = socketRef.current;
+    if (!socket) return;
 
     socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
     socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
 
-    socket.on("online_users", (users) => setOnlineUsers(users));
-
-    socket.on("receive_message", (data) => {
+    const handleReceive = (data) => {
       if (data.room === activeRoom.name) {
         setChatHistory(prev => [...prev, data]);
         socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
@@ -211,33 +239,20 @@ export default function ChatDashboard() {
       } else {
         setUnreadRooms(prev => new Set([...prev, data.room]));
       }
-    });
-
-    socket.on("message_delivered", ({ tempId, message: savedMsg }) => {
-      setChatHistory(prev => prev.map(m => m._id === tempId ? savedMsg : m));
-    });
-
-    socket.on("message_seen_update", ({ _id, seenBy }) => {
-      setChatHistory(prev => prev.map(m => m._id === _id ? { ...m, seenBy } : m));
-    });
-
-    socket.on("message_deleted", (id) => setChatHistory(prev => prev.filter(m => m._id !== id)));
-    socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
-    socket.on("user_typing", (data) => {
+    };
+    const handleTyping = (data) => {
       if (data.room === activeRoom.name && data.handle !== myHandle) setTypingStatus(data.isTyping ? data.handle : null);
-    });
-    socket.on("room_cleared", (roomName) => { if (activeRoom.name === roomName) setChatHistory([]); });
-    socket.on("room_created", (newRoom) => { setRooms(prev => (prev.find(r => r.name === newRoom.name) ? prev : [...prev, newRoom])); });
-    socket.on("room_deleted", (roomName) => {
-      setRooms(prev => prev.filter(r => r.name !== roomName));
-      setActiveRoom(current => current.name === roomName ? { name: "General Vibes #1", password: "" } : current);
-    });
+    };
+    const handleCleared = (roomName) => { if (activeRoom.name === roomName) setChatHistory([]); };
+
+    socket.on("receive_message", handleReceive);
+    socket.on("user_typing", handleTyping);
+    socket.on("room_cleared", handleCleared);
 
     return () => {
-      socket.off("online_users"); socket.off("receive_message"); socket.off("message_deleted");
-      socket.off("user_typing"); socket.off("message_edited"); socket.off("room_created");
-      socket.off("room_deleted"); socket.off("room_cleared"); socket.off("message_delivered");
-      socket.off("message_seen_update");
+      socket.off("receive_message", handleReceive);
+      socket.off("user_typing", handleTyping);
+      socket.off("room_cleared", handleCleared);
     };
   }, [myHandle, activeRoom.name]);
 
