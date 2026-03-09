@@ -5,27 +5,24 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
+
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Serve uploaded videos statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Ensure uploads folder exists
-if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
-
-// Multer config — store videos on disk
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, './uploads/'),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s/g, '_')}`)
-});
+// Multer — store in memory, then stream to Cloudinary
 const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('video/')) cb(null, true);
     else cb(new Error('Only video files allowed'));
@@ -51,7 +48,7 @@ const Message = mongoose.model('Message', new mongoose.Schema({
   author: String,
   text: String,
   image: String,
-  video: String,   // URL to the uploaded video file
+  video: String,
   time: String,
   reactions: { type: Object, default: {} },
   createdAt: { type: Date, default: Date.now }
@@ -64,11 +61,22 @@ const io = new Server(server, {
 });
 const activeUsers = {};
 
-// Video upload endpoint
+// Video upload → Cloudinary
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
-  const videoUrl = `${process.env.BACKEND_URL || 'http://localhost:3001'}/uploads/${req.file.filename}`;
-  res.json({ url: videoUrl });
+
+  const uploadStream = cloudinary.uploader.upload_stream(
+    { resource_type: 'video', folder: 'the-vault' },
+    (error, result) => {
+      if (error) {
+        console.error('Cloudinary error:', error);
+        return res.status(500).json({ error: 'Upload to Cloudinary failed' });
+      }
+      res.json({ url: result.secure_url });
+    }
+  );
+
+  streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
 });
 
 app.get('/api/rooms', async (req, res) => {
