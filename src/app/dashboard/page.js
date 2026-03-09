@@ -16,36 +16,46 @@ const EMOJI_LIST = [
   "💬","📢","🚀","🌈","⚡","💥","🎯","🏆","💎","🕹️",
 ];
 
+// Premium color palette
+const C = {
+  purple: "#A855F7",
+  purpleDim: "#7C3AED",
+  green: "#10F5A0",
+  red: "#FF4B6E",
+  gold: "#F5C542",
+  darkBg: "#0A0A0F",
+  darkCard: "#111118",
+  darkBorder: "#1E1E2E",
+  darkHover: "#1A1A28",
+  lightBg: "#F7F5FF",
+  lightCard: "#FFFFFF",
+  lightBorder: "#E2E0F0",
+};
+
 function MessageTicks({ status }) {
-  if (status === 'sending') {
-    return (
-      <span className="inline-flex items-center ml-1 opacity-70" title="Sending">
-        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
-          <path d="M1 5L4 8L11 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (status === 'delivered') {
-    return (
-      <span className="inline-flex items-center ml-1 opacity-70" title="Delivered">
-        <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
-          <path d="M1 5L4 8L11 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9 8L16 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (status === 'seen') {
-    return (
-      <span className="inline-flex items-center ml-1" title="Seen">
-        <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
-          <path d="M1 5L4 8L11 1" stroke="#05FFA1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9 8L16 1" stroke="#05FFA1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
+  if (status === 'sending') return (
+    <span className="inline-flex items-center ml-1" style={{opacity: 0.5}}>
+      <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+        <path d="M1 5L4 8L11 1" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+  if (status === 'delivered') return (
+    <span className="inline-flex items-center ml-1" style={{opacity: 0.6}}>
+      <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
+        <path d="M1 5L4 8L11 1" stroke="#aaa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 5L9 8L16 1" stroke="#aaa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+  if (status === 'seen') return (
+    <span className="inline-flex items-center ml-1">
+      <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
+        <path d="M1 5L4 8L11 1" stroke={C.green} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 5L9 8L16 1" stroke={C.green} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
   return null;
 }
 
@@ -53,54 +63,154 @@ function getTickStatus(msg, myHandle) {
   if (!msg._id || msg._id.startsWith('temp_')) return 'sending';
   if (!msg.seenBy || msg.seenBy.length <= 1) return 'delivered';
   const othersWhoSaw = (msg.seenBy || []).filter(u => u !== myHandle);
-  if (othersWhoSaw.length > 0) return 'seen';
-  return 'delivered';
+  return othersWhoSaw.length > 0 ? 'seen' : 'delivered';
+}
+
+function Avatar({ name, size = 32 }) {
+  const colors = ["#A855F7","#10F5A0","#F5C542","#FF4B6E","#60A5FA","#F472B6"];
+  const color = colors[name?.charCodeAt(0) % colors.length] || C.purple;
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: `linear-gradient(135deg, ${color}33, ${color}66)`,
+      border: `1.5px solid ${color}88`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.4, fontWeight: 900, color, flexShrink: 0,
+      backdropFilter: 'blur(4px)',
+    }}>
+      {name?.[0]?.toUpperCase()}
+    </div>
+  );
 }
 
 function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose, unreadRooms }) {
+  const bg = isDarkMode ? C.darkCard : C.lightCard;
+  const border = isDarkMode ? C.darkBorder : C.lightBorder;
+  const text = isDarkMode ? '#E8E8F0' : '#1A1A2E';
+  const mutedText = isDarkMode ? '#666680' : '#9090A8';
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-2 border-b-[4px] border-black pb-2">
-        <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter">Spaces</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={onToggleTheme} className={`p-2 rounded-full border-2 border-black transition-all hover:scale-110 active:scale-95 ${isDarkMode ? "bg-[#FFD700]" : "bg-[#2D3436]"}`}>
-            {isDarkMode ? "☀️" : "🌙"}
-          </button>
-          {showClose && <button onClick={onClose} className="p-1.5 border-2 border-black font-black text-xs leading-none">✕</button>}
-        </div>
-      </div>
-      <p className="mb-3 text-[10px] font-bold p-1 border-2 border-black bg-[#05FFA1] text-black uppercase text-center truncate">ID: {myHandle}</p>
-      <button onClick={() => { onCreateClick(); onClose(); }} className="mb-4 w-full border-[3px] border-black p-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#B967FF] hover:text-white transition-all">
-        + Build New Space
-      </button>
-      <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-        {rooms.map((room) => (
-          <div key={room.name} className="group relative">
-            <button onClick={() => onJoin(room)}
-              className={`w-full border-[3px] border-black p-3 font-bold transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center text-sm ${
-                activeRoom.name === room.name ? "bg-[#B967FF] text-white" : (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black")
-              }`}>
-              <span className="truncate mr-2">{room.name}</span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {room.password && <span className="text-[10px]">🔒</span>}
-                {unreadRooms.has(room.name) && activeRoom.name !== room.name && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF4B4B] border-2 border-black animate-pulse" />
-                )}
-              </div>
-            </button>
-            {room.name !== "General Vibes #1" && (
-              <button onClick={(e) => { e.stopPropagation(); onDelete(room.name); }}
-                className="absolute -right-2 top-1 opacity-0 group-hover:opacity-100 bg-[#FF4B4B] text-white border-2 border-black rounded-full w-5 h-5 flex items-center justify-center text-[8px] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all z-20">🗑️</button>
+    <div className="flex flex-col h-full" style={{background: bg}}>
+      {/* Header */}
+      <div style={{padding: '20px 20px 16px', borderBottom: `1px solid ${border}`}}>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 style={{fontSize: 11, fontWeight: 800, letterSpacing: '0.15em', color: mutedText, textTransform: 'uppercase', marginBottom: 4}}>THE VAULT</h2>
+            <p style={{fontSize: 18, fontWeight: 900, color: text, letterSpacing: '-0.03em'}}>Spaces</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onToggleTheme} style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: isDarkMode ? '#1E1E2E' : '#F0EEF8',
+              border: `1px solid ${border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+            }}>{isDarkMode ? "☀️" : "🌙"}</button>
+            {showClose && (
+              <button onClick={onClose} style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: isDarkMode ? '#1E1E2E' : '#F0EEF8',
+                border: `1px solid ${border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, cursor: 'pointer', color: mutedText, fontWeight: 700,
+              }}>✕</button>
             )}
           </div>
-        ))}
-        <div className="mt-6 pt-4 border-t-4 border-black border-dashed">
-          <h3 className={`text-[10px] font-black uppercase mb-3 ${isDarkMode ? "text-[#05FFA1]" : "opacity-60"}`}>Live ({onlineUsers.length})</h3>
-          <div className="space-y-2">
+        </div>
+
+        {/* User pill */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', borderRadius: 12,
+          background: isDarkMode ? '#0A0A0F' : '#F7F5FF',
+          border: `1px solid ${border}`,
+        }}>
+          <Avatar name={myHandle} size={28} />
+          <div style={{minWidth: 0}}>
+            <p style={{fontSize: 10, color: mutedText, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase'}}>Logged in as</p>
+            <p style={{fontSize: 13, fontWeight: 800, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{myHandle}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rooms */}
+      <div style={{flex: 1, overflowY: 'auto', padding: '12px 16px'}}>
+        <button onClick={() => { onCreateClick(); onClose(); }} style={{
+          width: '100%', padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+          background: `linear-gradient(135deg, ${C.purple}22, ${C.purple}11)`,
+          border: `1px solid ${C.purple}44`,
+          color: C.purple, fontWeight: 800, fontSize: 12,
+          letterSpacing: '0.05em', textTransform: 'uppercase',
+          cursor: 'pointer', transition: 'all 0.2s',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          <span style={{fontSize: 16}}>+</span> New Space
+        </button>
+
+        <p style={{fontSize: 10, fontWeight: 700, color: mutedText, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4}}>Rooms</p>
+
+        <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+          {rooms.map((room) => {
+            const isActive = activeRoom.name === room.name;
+            return (
+              <div key={room.name} className="group" style={{position: 'relative'}}>
+                <button onClick={() => onJoin(room)} style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  background: isActive
+                    ? `linear-gradient(135deg, ${C.purple}33, ${C.purpleDim}22)`
+                    : 'transparent',
+                  border: isActive ? `1px solid ${C.purple}55` : `1px solid transparent`,
+                  color: isActive ? C.purple : text,
+                  fontWeight: isActive ? 800 : 600,
+                  fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  textAlign: 'left',
+                }}>
+                  <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8}}>{room.name}</span>
+                  <div style={{display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0}}>
+                    {room.password && <span style={{fontSize: 10, opacity: 0.5}}>🔒</span>}
+                    {unreadRooms.has(room.name) && !isActive && (
+                      <span style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: C.red, display: 'block',
+                        boxShadow: `0 0 6px ${C.red}`,
+                      }} />
+                    )}
+                  </div>
+                </button>
+                {room.name !== "General Vibes #1" && (
+                  <button onClick={(e) => { e.stopPropagation(); onDelete(room.name); }}
+                    className="group-hover:opacity-100"
+                    style={{
+                      position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)',
+                      opacity: 0, width: 20, height: 20, borderRadius: '50%',
+                      background: C.red, border: 'none', color: 'white',
+                      fontSize: 8, cursor: 'pointer', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      transition: 'opacity 0.15s', zIndex: 20,
+                    }}>✕</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Online users */}
+        <div style={{marginTop: 20, paddingTop: 16, borderTop: `1px solid ${border}`}}>
+          <p style={{fontSize: 10, fontWeight: 700, color: mutedText, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4}}>
+            Online · {onlineUsers.length}
+          </p>
+          <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
             {onlineUsers.map((user, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#05FFA1] animate-pulse border border-black shrink-0" />
-                <span className="text-xs font-bold uppercase tracking-wider truncate">{typeof user === 'object' ? user.handle : user}</span>
+              <div key={i} style={{display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0'}}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: C.green, flexShrink: 0,
+                  boxShadow: `0 0 6px ${C.green}`,
+                }} />
+                <span style={{fontSize: 12, fontWeight: 600, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                  {typeof user === 'object' ? user.handle : user}
+                </span>
               </div>
             ))}
           </div>
@@ -128,7 +238,7 @@ export default function ChatDashboard() {
   const [chatHistory, setChatHistory] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingStatus, setTypingStatus] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -146,7 +256,13 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
-  // Close emoji picker on outside click
+  const bg = isDarkMode ? C.darkBg : C.lightBg;
+  const cardBg = isDarkMode ? C.darkCard : C.lightCard;
+  const border = isDarkMode ? C.darkBorder : C.lightBorder;
+  const text = isDarkMode ? '#E8E8F0' : '#1A1A2E';
+  const mutedText = isDarkMode ? '#666680' : '#9090A8';
+  const inputBg = isDarkMode ? '#111118' : '#FFFFFF';
+
   useEffect(() => {
     const handler = (e) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) setShowEmojiPicker(false);
@@ -155,7 +271,6 @@ export default function ChatDashboard() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Mount: read localStorage, set handle — DO NOT reset chatHistory here
   useEffect(() => {
     setMounted(true);
     const savedName = localStorage.getItem("vault_user");
@@ -163,17 +278,16 @@ export default function ChatDashboard() {
     myHandleRef.current = savedName;
     setMyHandle(savedName);
     const savedTheme = localStorage.getItem("vault_theme");
-    if (savedTheme === "dark") setIsDarkMode(true);
+    if (savedTheme === "light") setIsDarkMode(false);
+    else setIsDarkMode(true);
   }, [router]);
 
-  // Socket init — runs ONCE when myHandle is set
   useEffect(() => {
     if (!myHandle) return;
     if (!socketRef.current || !socketRef.current.connected) {
       socketRef.current = io(API, { forceNew: false });
     }
     const socket = socketRef.current;
-
     socket.on("online_users", (users) => setOnlineUsers(users));
     socket.on("message_delivered", ({ tempId, message: savedMsg }) => {
       setChatHistory(prev => prev.map(m => m._id === tempId ? savedMsg : m));
@@ -188,7 +302,6 @@ export default function ChatDashboard() {
       setRooms(prev => prev.filter(r => r.name !== roomName));
       setActiveRoom(current => current.name === roomName ? { name: "General Vibes #1", password: "" } : current);
     });
-
     return () => {
       socket.off("online_users"); socket.off("message_delivered"); socket.off("message_seen_update");
       socket.off("message_deleted"); socket.off("message_edited");
@@ -196,21 +309,16 @@ export default function ChatDashboard() {
     };
   }, [myHandle]);
 
-  // Room join + history — runs when room changes
   useEffect(() => {
     if (!myHandle) return;
-
     const loadHistory = async () => {
       try {
         const res = await fetch(`${API}/api/messages/${encodeURIComponent(activeRoom.name)}`);
         if (!res.ok) return;
         const data = await res.json();
         if (Array.isArray(data)) setChatHistory(data);
-      } catch (err) {
-        console.error("History fetch failed — keeping existing chat");
-      }
+      } catch (err) { console.error("History fetch failed"); }
     };
-
     const loadRooms = async () => {
       try {
         const res = await fetch(`${API}/api/rooms`);
@@ -220,20 +328,15 @@ export default function ChatDashboard() {
         setRooms([...defaults, ...dbRooms.filter(r => r.name !== "General Vibes #1")]);
       } catch (err) { setRooms([{ name: "General Vibes #1", password: "" }]); }
     };
-
     loadHistory();
     loadRooms();
     setUnreadRooms(prev => { const next = new Set(prev); next.delete(activeRoom.name); return next; });
-
     const socket = socketRef.current;
     if (!socket) return;
-
     socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
     socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
-
     const handleReceive = (data) => {
       if (data.room === activeRoom.name) {
-        // Skip if sender — they already have it via message_delivered
         setChatHistory(prev => {
           if (prev.some(m => m._id === data._id)) return prev;
           return [...prev, data];
@@ -244,18 +347,16 @@ export default function ChatDashboard() {
         setUnreadRooms(prev => new Set([...prev, data.room]));
       }
     };
-    const handleTyping = (data) => {
+    const handleTypingEv = (data) => {
       if (data.room === activeRoom.name && data.handle !== myHandle) setTypingStatus(data.isTyping ? data.handle : null);
     };
     const handleCleared = (roomName) => { if (activeRoom.name === roomName) setChatHistory([]); };
-
     socket.on("receive_message", handleReceive);
-    socket.on("user_typing", handleTyping);
+    socket.on("user_typing", handleTypingEv);
     socket.on("room_cleared", handleCleared);
-
     return () => {
       socket.off("receive_message", handleReceive);
-      socket.off("user_typing", handleTyping);
+      socket.off("user_typing", handleTypingEv);
       socket.off("room_cleared", handleCleared);
     };
   }, [myHandle, activeRoom.name]);
@@ -268,28 +369,23 @@ export default function ChatDashboard() {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') ctx.resume();
-
       const playTone = (freq, startTime, duration, gainVal) => {
         const osc = ctx.createOscillator();
         const gainNode = ctx.createGain();
         const compressor = ctx.createDynamicsCompressor();
-        osc.connect(gainNode);
-        gainNode.connect(compressor);
-        compressor.connect(ctx.destination);
+        osc.connect(gainNode); gainNode.connect(compressor); compressor.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
         osc.frequency.exponentialRampToValueAtTime(freq * 1.5, startTime + 0.05);
         gainNode.gain.setValueAtTime(0, startTime);
         gainNode.gain.linearRampToValueAtTime(gainVal, startTime + 0.01);
         gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-        osc.start(startTime);
-        osc.stop(startTime + duration + 0.01);
+        osc.start(startTime); osc.stop(startTime + duration + 0.01);
       };
-
       const now = ctx.currentTime;
       playTone(520, now, 0.12, 0.8);
       playTone(780, now + 0.1, 0.18, 0.7);
-    } catch (e) { /* silently fail */ }
+    } catch (e) {}
   };
 
   const handleExit = () => {
@@ -319,7 +415,7 @@ export default function ChatDashboard() {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: deletePassword })
     });
     if (res.ok) { setRoomToDelete(null); setDeletePassword(""); }
-    else alert("Incorrect Room Key! ❌");
+    else alert("Incorrect Room Key!");
   };
 
   const attemptJoin = (room) => {
@@ -334,7 +430,7 @@ export default function ChatDashboard() {
       setActiveRoom(roomToJoin);
       setUnreadRooms(prev => { const next = new Set(prev); next.delete(roomToJoin.name); return next; });
       setRoomToJoin(null); setJoinPassword(""); setSidebarOpen(false);
-    } else alert("Wrong Password! ❌");
+    } else alert("Wrong Password!");
   };
 
   const toggleTheme = () => {
@@ -348,15 +444,12 @@ export default function ChatDashboard() {
     socketRef.current.emit("react_message", { messageId, emoji, handle: myHandle, room: activeRoom.name });
   };
 
-  // IMAGE: upload to Cloudinary via HTTP, then send URL via socket
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
-
     setUploadingImage(true);
     try {
-      // Compress image via canvas before uploading
       const compressed = await new Promise((resolve, reject) => {
         const img = new Image();
         const objectUrl = URL.createObjectURL(file);
@@ -370,37 +463,23 @@ export default function ChatDashboard() {
             canvas.height = Math.floor(img.height * scale);
             canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(objectUrl);
-            canvas.toBlob((blob) => {
-              if (blob) resolve(blob);
-              else reject(new Error('Canvas compression failed'));
-            }, 'image/jpeg', 0.75);
+            canvas.toBlob((blob) => { if (blob) resolve(blob); else reject(new Error('Compression failed')); }, 'image/jpeg', 0.75);
           } catch (err) { reject(err); }
         };
         img.src = objectUrl;
       });
-
       const formData = new FormData();
       formData.append('image', compressed, 'image.jpg');
       const res = await fetch(`${API}/api/upload/image`, { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`);
       const { url } = json;
-
       const tempId = `temp_${Date.now()}`;
-      const tempMsg = {
-        _id: tempId, room: activeRoom.name, author: myHandle,
-        image: url,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        seenBy: [myHandle]
-      };
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, image: url, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
       setChatHistory(prev => [...prev, tempMsg]);
-      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, image: tempMsg.image, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
-    } catch (err) {
-      console.error("Image upload error:", err);
-      alert("Image upload failed: " + err.message);
-    } finally {
-      setUploadingImage(false);
-    }
+      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, image: url, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
+    } catch (err) { alert("Image upload failed: " + err.message); }
+    finally { setUploadingImage(false); }
   };
 
   const handleVideoUpload = async (e) => {
@@ -415,20 +494,11 @@ export default function ChatDashboard() {
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
       const tempId = `temp_${Date.now()}`;
-      const tempMsg = {
-        _id: tempId, room: activeRoom.name, author: myHandle,
-        video: url,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        seenBy: [myHandle]
-      };
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, video: url, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
       setChatHistory(prev => [...prev, tempMsg]);
-      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, video: tempMsg.video, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
-    } catch (err) {
-      alert("Video upload failed.");
-    } finally {
-      setUploadingVideo(false);
-      e.target.value = "";
-    }
+      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, video: url, time: tempMsg.time, seenBy: tempMsg.seenBy, tempId });
+    } catch (err) { alert("Video upload failed."); }
+    finally { setUploadingVideo(false); e.target.value = ""; }
   };
 
   const sendMessage = () => {
@@ -450,8 +520,8 @@ export default function ChatDashboard() {
 
   const insertEmoji = (emoji) => { setMessage(prev => prev + emoji); setShowEmojiPicker(false); };
 
-  if (!mounted) return <div style={{height: '100dvh'}} className="bg-[#FFFBEB]" />;
-  if (!myHandle) return <div style={{height: '100dvh'}} className="bg-[#FFFBEB]" />;
+  if (!mounted) return <div style={{height: '100dvh', background: C.darkBg}} />;
+  if (!myHandle) return <div style={{height: '100dvh', background: C.darkBg}} />;
 
   const sidebarProps = {
     rooms, activeRoom, onJoin: attemptJoin,
@@ -462,32 +532,84 @@ export default function ChatDashboard() {
     isDarkMode, myHandle, onlineUsers, unreadRooms,
   };
 
+  // Modal input style
+  const modalInput = {
+    width: '100%', padding: '12px 14px', borderRadius: 10, marginBottom: 12,
+    background: isDarkMode ? '#0A0A0F' : '#F7F5FF',
+    border: `1px solid ${border}`,
+    color: text, fontWeight: 600, fontSize: 14, outline: 'none',
+    boxSizing: 'border-box',
+  };
+
   return (
-    <main style={{height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)'}} className={`flex font-mono overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D] text-white" : "bg-[#FFFBEB] text-black"}`}>
+    <main style={{
+      height: '100dvh',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
+      display: 'flex', background: bg,
+      fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      overflow: 'hidden', transition: 'background 0.3s',
+    }}>
 
       {/* Modals */}
       <AnimatePresence>
         {(showCreateModal || roomToJoin || roomToDelete) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className={`border-[4px] border-black p-6 sm:p-8 max-w-sm w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+            style={{position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)'}}>
+            <motion.div initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 20 }}
+              style={{
+                background: isDarkMode ? 'rgba(17,17,24,0.95)' : 'rgba(255,255,255,0.95)',
+                border: `1px solid ${border}`,
+                borderRadius: 20, padding: '28px 24px', maxWidth: 360, width: '100%',
+                boxShadow: isDarkMode ? '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(168,85,247,0.1)' : '0 24px 80px rgba(0,0,0,0.15)',
+                backdropFilter: 'blur(20px)',
+              }}>
               {roomToDelete ? (<>
-                <h2 className="text-lg sm:text-xl font-black uppercase mb-2 italic text-[#FF4B4B]">Confirm Destruction</h2>
-                <p className="text-[10px] font-bold uppercase mb-4 opacity-60">Enter the Room Key for {roomToDelete} to destroy it.</p>
-                <input placeholder="Room Key" type="password" className="w-full border-2 border-black p-3 text-black font-bold outline-none mb-4" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmDeleteRoom()} autoFocus />
-                <button onClick={confirmDeleteRoom} className="w-full bg-[#FF4B4B] text-white border-[3px] border-black p-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-all">Destroy Space 💣</button>
+                <div style={{marginBottom: 20}}>
+                  <p style={{fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.red, textTransform: 'uppercase', marginBottom: 6}}>Danger Zone</p>
+                  <h2 style={{fontSize: 20, fontWeight: 900, color: text, letterSpacing: '-0.03em'}}>Delete Space</h2>
+                  <p style={{fontSize: 13, color: mutedText, marginTop: 6}}>Enter the key for <strong style={{color: text}}>{roomToDelete}</strong></p>
+                </div>
+                <input placeholder="Room Key" type="password" style={modalInput} value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmDeleteRoom()} autoFocus />
+                <button onClick={confirmDeleteRoom} style={{
+                  width: '100%', padding: '13px', borderRadius: 10,
+                  background: `linear-gradient(135deg, ${C.red}, #FF6B8A)`,
+                  border: 'none', color: 'white', fontWeight: 800, fontSize: 14,
+                  cursor: 'pointer', letterSpacing: '0.05em',
+                }}>Delete Forever</button>
               </>) : showCreateModal ? (<>
-                <h2 className="text-lg sm:text-xl font-black uppercase mb-4 italic">New Space</h2>
-                <input placeholder="Name" className="w-full border-2 border-black p-3 text-black font-bold outline-none mb-4" value={newRoomData.name} onChange={(e) => setNewRoomData({ ...newRoomData, name: e.target.value })} />
-                <input placeholder="Set Password" type="password" className="w-full border-2 border-black p-3 text-black font-bold outline-none mb-4" value={newRoomData.password} onChange={(e) => setNewRoomData({ ...newRoomData, password: e.target.value })} />
-                <button onClick={handleCreateRoom} className="w-full bg-[#B967FF] text-white border-[3px] border-black p-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-all">Build Space</button>
+                <div style={{marginBottom: 20}}>
+                  <p style={{fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.purple, textTransform: 'uppercase', marginBottom: 6}}>Create</p>
+                  <h2 style={{fontSize: 20, fontWeight: 900, color: text, letterSpacing: '-0.03em'}}>New Space</h2>
+                </div>
+                <input placeholder="Space name" style={modalInput} value={newRoomData.name} onChange={(e) => setNewRoomData({ ...newRoomData, name: e.target.value })} />
+                <input placeholder="Set a password" type="password" style={modalInput} value={newRoomData.password} onChange={(e) => setNewRoomData({ ...newRoomData, password: e.target.value })} />
+                <button onClick={handleCreateRoom} style={{
+                  width: '100%', padding: '13px', borderRadius: 10,
+                  background: `linear-gradient(135deg, ${C.purple}, ${C.purpleDim})`,
+                  border: 'none', color: 'white', fontWeight: 800, fontSize: 14,
+                  cursor: 'pointer', letterSpacing: '0.05em',
+                }}>Create Space</button>
               </>) : (<>
-                <h2 className="text-lg sm:text-xl font-black uppercase mb-4 italic tracking-tighter">Join {roomToJoin?.name}</h2>
-                <input placeholder="Enter Room Key" type="password" className="w-full border-2 border-black p-3 text-black font-bold outline-none mb-4" value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyPassword()} autoFocus />
-                <button onClick={verifyPassword} className="w-full bg-[#05FFA1] text-black border-[3px] border-black p-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-all">Enter Vault</button>
+                <div style={{marginBottom: 20}}>
+                  <p style={{fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: C.green, textTransform: 'uppercase', marginBottom: 6}}>Join</p>
+                  <h2 style={{fontSize: 20, fontWeight: 900, color: text, letterSpacing: '-0.03em'}}>{roomToJoin?.name}</h2>
+                </div>
+                <input placeholder="Enter room password" type="password" style={modalInput} value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyPassword()} autoFocus />
+                <button onClick={verifyPassword} style={{
+                  width: '100%', padding: '13px', borderRadius: 10,
+                  background: `linear-gradient(135deg, ${C.green}, #00D68F)`,
+                  border: 'none', color: '#0A0A0F', fontWeight: 800, fontSize: 14,
+                  cursor: 'pointer', letterSpacing: '0.05em',
+                }}>Enter Vault</button>
               </>)}
-              <button onClick={() => { setShowCreateModal(false); setRoomToJoin(null); setRoomToDelete(null); setDeletePassword(""); }} className="w-full mt-4 text-[10px] font-black uppercase opacity-60">Cancel</button>
-            </div>
+              <button onClick={() => { setShowCreateModal(false); setRoomToJoin(null); setRoomToDelete(null); setDeletePassword(""); }}
+                style={{width: '100%', marginTop: 12, padding: '10px', background: 'transparent', border: 'none', color: mutedText, fontWeight: 700, fontSize: 12, cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'uppercase'}}>
+                Cancel
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -496,182 +618,337 @@ export default function ChatDashboard() {
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/50 md:hidden" />
+            onClick={() => setSidebarOpen(false)}
+            style={{position: 'fixed', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)'}}
+            className="md:hidden" />
         )}
       </AnimatePresence>
 
       {/* Mobile sidebar drawer */}
       <AnimatePresence>
         {sidebarOpen && (
-          <motion.div initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`fixed top-0 left-0 w-72 z-40 border-r-[4px] border-black p-4 md:hidden ${isDarkMode ? "bg-[#161616]" : "bg-white"}`} style={{height: '100dvh'}}>
+          <motion.div initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            style={{position: 'fixed', top: 0, left: 0, width: 280, zIndex: 40, height: '100dvh', borderRight: `1px solid ${border}`, overflow: 'hidden'}}
+            className="md:hidden">
             <Sidebar {...sidebarProps} showClose={true} />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Desktop sidebar */}
-      <div className={`hidden md:flex w-72 lg:w-80 border-r-[4px] border-black p-5 lg:p-6 flex-col z-20 h-full shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+      <div style={{width: 280, borderRight: `1px solid ${border}`, flexShrink: 0, height: '100%', overflow: 'hidden', transition: 'all 0.3s'}}
+        className="hidden md:block">
         <Sidebar {...sidebarProps} showClose={false} />
       </div>
 
       {/* Main chat */}
-      <div className={`flex-1 flex flex-col h-full min-w-0 transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
+      <div style={{flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, background: bg}}>
 
         {/* Header */}
-        <div className={`border-b-[4px] border-black px-3 py-3 sm:px-5 sm:py-4 flex justify-between items-center shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => setSidebarOpen(true)}
-              className={`md:hidden shrink-0 border-[3px] border-black px-2 py-1.5 font-black text-base leading-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-all ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>☰</button>
-            <h1 className={`text-sm sm:text-xl lg:text-2xl font-black uppercase italic tracking-tighter truncate ${isDarkMode ? "text-[#B967FF]" : "text-black"}`}>{activeRoom.name}</h1>
+        <div style={{
+          padding: '12px 16px', borderBottom: `1px solid ${border}`,
+          background: isDarkMode ? 'rgba(17,17,24,0.8)' : 'rgba(255,255,255,0.8)',
+          backdropFilter: 'blur(20px)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexShrink: 0, zIndex: 10,
+        }}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, minWidth: 0}}>
+            <button onClick={() => setSidebarOpen(true)} className="md:hidden" style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              background: isDarkMode ? C.darkHover : '#F0EEF8',
+              border: `1px solid ${border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, cursor: 'pointer', color: text,
+            }}>☰</button>
+            <div style={{minWidth: 0}}>
+              <p style={{fontSize: 11, fontWeight: 700, color: mutedText, letterSpacing: '0.1em', textTransform: 'uppercase', lineHeight: 1}}>Active Space</p>
+              <h1 style={{fontSize: 16, fontWeight: 900, color: text, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{activeRoom.name}</h1>
+            </div>
           </div>
-          <div className="flex gap-2 shrink-0 ml-2">
-            <button onClick={() => setSoundEnabled(prev => !prev)}
-              className={`text-[8px] font-black border-2 border-black px-2 py-1 transition-all ${soundEnabled ? (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black") : "bg-[#FF4B4B] text-white"}`}
-              title={soundEnabled ? "Mute" : "Unmute"}>
-              {soundEnabled ? "🔔" : "🔕"}
-            </button>
-            <button onClick={() => { if (confirm("Clear all messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, { method: 'DELETE' }); }}
-              className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
-            <button onClick={handleExit} className="text-[8px] font-black bg-black text-white border-2 border-black px-2 py-1 hover:bg-[#FF4B4B] transition-all">EXIT</button>
+          <div style={{display: 'flex', gap: 6, flexShrink: 0, marginLeft: 10}}>
+            <button onClick={() => setSoundEnabled(prev => !prev)} style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: soundEnabled ? (isDarkMode ? C.darkHover : '#F0EEF8') : `${C.red}22`,
+              border: `1px solid ${soundEnabled ? border : C.red + '44'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, cursor: 'pointer',
+            }}>{soundEnabled ? "🔔" : "🔕"}</button>
+            <button onClick={() => { if (confirm("Clear all messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, { method: 'DELETE' }); }} style={{
+              padding: '0 10px', height: 32, borderRadius: 8,
+              background: `${C.red}22`, border: `1px solid ${C.red}44`,
+              color: C.red, fontWeight: 800, fontSize: 10,
+              letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+            }}>Wipe</button>
+            <button onClick={handleExit} style={{
+              padding: '0 10px', height: 32, borderRadius: 8,
+              background: isDarkMode ? C.darkHover : '#F0EEF8',
+              border: `1px solid ${border}`,
+              color: mutedText, fontWeight: 800, fontSize: 10,
+              letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+            }}>Exit</button>
           </div>
         </div>
 
         {/* Messages */}
-        <div className={`flex-1 px-3 py-4 sm:p-6 lg:p-8 overflow-y-auto transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#f9f9f9]"}`}>
+        <div style={{flex: 1, overflowY: 'auto', padding: '16px 12px', background: bg}} className="sm:px-6 lg:px-8">
           <AnimatePresence initial={false}>
-            {chatHistory.map((msg) => (
-              <motion.div key={msg._id} layout
-                initial={{ opacity: 0, y: 15, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                className={`group flex flex-col mb-4 sm:mb-6 ${msg.author === myHandle ? "items-end" : "items-start"}`}>
-                <div className={`relative border-[3px] border-black p-3 sm:p-4 max-w-[85%] sm:max-w-sm lg:max-w-md transition-all duration-300 ${
-                  msg.author === myHandle
-                    ? "bg-[#B967FF] text-white shadow-[4px_4px_0px_0px_rgba(185,103,255,0.3)]"
-                    : (isDarkMode ? "bg-[#1F1F1F] text-white shadow-[4px_4px_0px_0px_rgba(5,255,161,0.2)]" : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]")
-                }`}>
-                  {/* Hover actions */}
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
-                    <div className={`flex gap-1 border-2 border-black rounded-full px-2 py-0.5 mr-1 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-                      {['👍', '❤️', '🔥', '😂'].map(emoji => (
-                        <button key={emoji} onClick={() => handleReaction(msg._id, emoji)} className="hover:scale-125 transition-transform text-xs active:scale-90">{emoji}</button>
-                      ))}
+            {chatHistory.map((msg) => {
+              const isMe = msg.author === myHandle;
+              return (
+                <motion.div key={msg._id} layout
+                  initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                  style={{display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', marginBottom: 16}}>
+
+                  {/* Author + time */}
+                  {!isMe && (
+                    <div style={{display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, paddingLeft: 4}}>
+                      <Avatar name={msg.author} size={18} />
+                      <span style={{fontSize: 11, fontWeight: 700, color: mutedText, letterSpacing: '0.04em'}}>{msg.author} · {msg.time}</span>
                     </div>
-                    {msg.author === myHandle && !editingId && !msg._id?.startsWith('temp_') && (
-                      <>
-                        <button onClick={() => { setEditingId(msg._id); setEditText(msg.text); }} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#05FFA1]">✎</button>
-                        <button onClick={() => { if (confirm("Delete?")) fetch(`${API}/api/messages/${msg._id}`, { method: 'DELETE' }); }} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#FF4B4B]">🗑️</button>
-                      </>
+                  )}
+
+                  <div className="group" style={{position: 'relative', maxWidth: '85%'}}>
+                    {/* Bubble */}
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      background: isMe
+                        ? `linear-gradient(135deg, ${C.purple}, ${C.purpleDim})`
+                        : (isDarkMode ? C.darkCard : C.lightCard),
+                      border: isMe ? 'none' : `1px solid ${border}`,
+                      boxShadow: isMe
+                        ? `0 4px 20px ${C.purple}40`
+                        : (isDarkMode ? '0 2px 12px rgba(0,0,0,0.3)' : '0 2px 12px rgba(0,0,0,0.06)'),
+                      position: 'relative',
+                    }}>
+                      {/* Hover actions */}
+                      <div className="opacity-0 group-hover:opacity-100" style={{
+                        position: 'absolute', top: -36, right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0,
+                        display: 'flex', gap: 4, alignItems: 'center',
+                        background: isDarkMode ? 'rgba(17,17,24,0.95)' : 'rgba(255,255,255,0.95)',
+                        border: `1px solid ${border}`,
+                        borderRadius: 20, padding: '4px 8px',
+                        backdropFilter: 'blur(12px)',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                        zIndex: 10, transition: 'opacity 0.15s',
+                        pointerEvents: 'none',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.pointerEvents = 'all'}
+                      >
+                        {['👍', '❤️', '🔥', '😂'].map(emoji => (
+                          <button key={emoji} onClick={() => handleReaction(msg._id, emoji)}
+                            style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '1px 2px', transition: 'transform 0.1s'}}
+                            onMouseEnter={e => e.target.style.transform = 'scale(1.3)'}
+                            onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+                          >{emoji}</button>
+                        ))}
+                        {isMe && !editingId && !msg._id?.startsWith('temp_') && (
+                          <>
+                            <div style={{width: 1, height: 14, background: border, margin: '0 2px'}} />
+                            <button onClick={() => { setEditingId(msg._id); setEditText(msg.text); }}
+                              style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: mutedText, padding: '1px 3px'}}>✎</button>
+                            <button onClick={() => { if (confirm("Delete?")) fetch(`${API}/api/messages/${msg._id}`, { method: 'DELETE' }); }}
+                              style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.red, padding: '1px 3px'}}>🗑</button>
+                          </>
+                        )}
+                      </div>
+
+                      {msg.image && <img src={msg.image} alt="img" style={{width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 10, marginBottom: 6, display: 'block'}} />}
+                      {msg.video && <video src={msg.video} controls style={{width: '100%', maxHeight: 240, borderRadius: 10, marginBottom: 6, display: 'block', background: '#000'}} />}
+
+                      {editingId === msg._id ? (
+                        <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                          <input style={{
+                            padding: '8px 10px', borderRadius: 8,
+                            background: isDarkMode ? '#0A0A0F' : '#F7F5FF',
+                            border: `1px solid ${border}`, color: text,
+                            fontWeight: 600, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box',
+                          }}
+                            value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus />
+                          <div style={{display: 'flex', gap: 6}}>
+                            <button onClick={saveEdit} style={{padding: '4px 12px', borderRadius: 6, background: C.green, border: 'none', color: '#0A0A0F', fontWeight: 800, fontSize: 11, cursor: 'pointer'}}>Save</button>
+                            <button onClick={() => setEditingId(null)} style={{padding: '4px 12px', borderRadius: 6, background: 'transparent', border: `1px solid ${border}`, color: mutedText, fontWeight: 700, fontSize: 11, cursor: 'pointer'}}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {msg.text && (
+                            <p style={{
+                              fontSize: 15, fontWeight: 500, lineHeight: 1.45,
+                              color: isMe ? 'white' : text,
+                              wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                              margin: 0,
+                            }}>
+                              {msg.text}
+                              {isMe && <MessageTicks status={getTickStatus(msg, myHandle)} />}
+                            </p>
+                          )}
+                          {(msg.image || msg.video) && isMe && (
+                            <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 4}}>
+                              <MessageTicks status={getTickStatus(msg, myHandle)} />
+                            </div>
+                          )}
+                          {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                            <div style={{display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8}}>
+                              {Object.entries(msg.reactions).map(([emoji, users]) => (
+                                <button key={emoji} onClick={() => handleReaction(msg._id, emoji)} style={{
+                                  display: 'flex', alignItems: 'center', gap: 3,
+                                  padding: '2px 8px', borderRadius: 20,
+                                  background: users.includes(myHandle) ? `${C.green}22` : (isDarkMode ? '#1E1E2E' : '#F0EEF8'),
+                                  border: `1px solid ${users.includes(myHandle) ? C.green + '55' : border}`,
+                                  cursor: 'pointer', fontSize: 12,
+                                }}>
+                                  <span>{emoji}</span>
+                                  <span style={{fontSize: 11, fontWeight: 700, color: users.includes(myHandle) ? C.green : mutedText}}>{users.length}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Timestamp for my messages */}
+                    {isMe && (
+                      <p style={{fontSize: 10, color: mutedText, textAlign: 'right', marginTop: 3, paddingRight: 2}}>{msg.time}</p>
                     )}
                   </div>
-
-                  <p className={`text-[9px] sm:text-[10px] font-black uppercase mb-1 ${isDarkMode ? "text-[#05FFA1]" : "opacity-50"}`}>{msg.author} • {msg.time}</p>
-
-                  {msg.image && <img src={msg.image} alt="img" className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />}
-                  {msg.video && <video src={msg.video} controls className="mb-2 border-2 border-black w-full max-h-48 sm:max-h-64 rounded-sm bg-black" />}
-
-                  {editingId === msg._id ? (
-                    <div className="flex flex-col gap-2">
-                      <input className={`p-2 sm:p-3 border-[3px] border-black font-bold w-full text-sm ${isDarkMode ? "bg-[#333] text-white" : "bg-white text-black"}`}
-                        value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus />
-                      <div className="flex gap-2">
-                        <button onClick={saveEdit} className="text-[8px] font-black uppercase bg-[#05FFA1] border-2 border-black px-2 py-1">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-[8px] font-black uppercase opacity-60">Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {msg.text && (
-                        <p className="font-bold text-sm sm:text-base lg:text-lg break-words whitespace-pre-wrap leading-tight pr-2">
-                          {msg.text}
-                          {msg.author === myHandle && (
-                            <MessageTicks status={getTickStatus(msg, myHandle)} />
-                          )}
-                        </p>
-                      )}
-                      {(msg.image || msg.video) && msg.author === myHandle && (
-                        <div className="flex justify-end mt-1">
-                          <MessageTicks status={getTickStatus(msg, myHandle)} />
-                        </div>
-                      )}
-                      {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {Object.entries(msg.reactions).map(([emoji, users]) => (
-                            <div key={emoji} onClick={() => handleReaction(msg._id, emoji)}
-                              className={`flex items-center gap-1 border-2 border-black rounded-md px-1.5 py-0.5 text-[10px] cursor-pointer active:scale-95 ${
-                                users.includes(myHandle) ? "bg-[#05FFA1] text-black" : (isDarkMode ? "bg-[#333] text-white" : "bg-gray-100 text-black")
-                              }`}>
-                              <span>{emoji}</span><span className="font-black">{users.length}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
 
           {typingStatus && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 mb-4">
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className={`w-1.5 h-1.5 rounded-full animate-bounce ${isDarkMode ? "bg-[#05FFA1]" : "bg-black"}`} style={{ animationDelay: `${i * 150}ms` }} />
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              style={{display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingLeft: 4}}>
+              <div style={{display: 'flex', gap: 3, padding: '8px 12px', borderRadius: 20, background: isDarkMode ? C.darkCard : C.lightCard, border: `1px solid ${border}`}}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{width: 5, height: 5, borderRadius: '50%', background: C.purple, animation: 'bounce 1s infinite', animationDelay: `${i*0.15}s`}} />
                 ))}
               </div>
-              <span className={`text-[10px] font-black uppercase italic ${isDarkMode ? "text-[#05FFA1]" : "text-black"}`}>{typingStatus} is typing...</span>
+              <span style={{fontSize: 11, color: mutedText, fontWeight: 600}}>{typingStatus} is typing</span>
             </motion.div>
           )}
           <div ref={scrollRef} />
         </div>
 
         {/* Input bar */}
-        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+        <div style={{
+          padding: '10px 12px 10px',
+          borderTop: `1px solid ${border}`,
+          background: isDarkMode ? 'rgba(17,17,24,0.9)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(20px)',
+          flexShrink: 0,
+        }}>
           <AnimatePresence>
             {showEmojiPicker && (
               <motion.div ref={emojiPickerRef}
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                className={`mb-2 p-3 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] grid grid-cols-10 sm:grid-cols-12 gap-1 max-h-36 overflow-y-auto ${isDarkMode ? "bg-[#222]" : "bg-white"}`}>
-                {EMOJI_LIST.map((emoji) => (
-                  <button key={emoji} onClick={() => insertEmoji(emoji)} className="text-lg sm:text-xl hover:scale-125 active:scale-95 transition-transform p-0.5">{emoji}</button>
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+                style={{
+                  marginBottom: 8, padding: 10,
+                  background: isDarkMode ? 'rgba(17,17,24,0.98)' : 'rgba(255,255,255,0.98)',
+                  border: `1px solid ${border}`, borderRadius: 16,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(20px)',
+                  display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)',
+                  gap: 2, maxHeight: 140, overflowY: 'auto',
+                }}>
+                {EMOJI_LIST.map(emoji => (
+                  <button key={emoji} onClick={() => insertEmoji(emoji)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 18, padding: 3, borderRadius: 6,
+                    transition: 'transform 0.1s',
+                  }}
+                  onMouseEnter={e => e.target.style.transform = 'scale(1.3)'}
+                  onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+                  >{emoji}</button>
                 ))}
               </motion.div>
             )}
           </AnimatePresence>
 
           {(uploadingVideo || uploadingImage) && (
-            <div className={`mb-2 p-2 border-2 border-black text-[10px] font-black uppercase flex items-center gap-2 ${isDarkMode ? "bg-[#222] text-[#05FFA1]" : "bg-[#f0f0f0] text-black"}`}>
-              <div className="w-2 h-2 rounded-full bg-[#B967FF] animate-pulse" />
-              {uploadingImage ? "Uploading image..." : "Uploading video..."}
+            <div style={{
+              marginBottom: 8, padding: '6px 12px', borderRadius: 8,
+              background: `${C.purple}11`, border: `1px solid ${C.purple}33`,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <div style={{width: 6, height: 6, borderRadius: '50%', background: C.purple, animation: 'pulse 1s infinite'}} />
+              <span style={{fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.06em', textTransform: 'uppercase'}}>
+                {uploadingImage ? "Uploading image..." : "Uploading video..."}
+              </span>
             </div>
           )}
 
-          <div className="flex gap-2 items-center">
+          <div style={{display: 'flex', gap: 6, alignItems: 'center'}}>
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
             <input type="file" ref={videoInputRef} onChange={handleVideoUpload} className="hidden" accept="video/*" />
 
-            <button onClick={() => fileInputRef.current.click()} disabled={uploadingImage}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
-
-            <button onClick={() => videoInputRef.current.click()} disabled={uploadingVideo}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 ${isDarkMode ? "bg-[#222] text-white hover:bg-[#B967FF]" : "bg-white hover:bg-[#B967FF] hover:text-white"}`}>🎥</button>
-
-            <button onClick={() => setShowEmojiPicker(prev => !prev)}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${showEmojiPicker ? "bg-[#FFD700]" : (isDarkMode ? "bg-[#222] text-white hover:bg-[#333]" : "bg-white hover:bg-[#FFD700]")}`}>😊</button>
+            {/* Media buttons */}
+            {[
+              { icon: '📷', action: () => fileInputRef.current.click(), disabled: uploadingImage },
+              { icon: '🎥', action: () => videoInputRef.current.click(), disabled: uploadingVideo },
+              { icon: '😊', action: () => setShowEmojiPicker(p => !p), active: showEmojiPicker },
+            ].map(({ icon, action, disabled, active }) => (
+              <button key={icon} onClick={action} disabled={disabled} style={{
+                width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                background: active ? `${C.purple}22` : (isDarkMode ? C.darkHover : '#F0EEF8'),
+                border: `1px solid ${active ? C.purple + '55' : border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, cursor: 'pointer', opacity: disabled ? 0.4 : 1,
+                transition: 'all 0.15s',
+              }}>{icon}</button>
+            ))}
 
             <input type="text" value={message}
               onChange={(e) => { setMessage(e.target.value); handleTyping(); }}
               onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-              placeholder="Type a message..."
-              className={`flex-1 min-w-0 border-[3px] border-black p-2.5 sm:p-4 text-sm sm:text-base font-bold outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${isDarkMode ? "bg-[#222] text-white placeholder-gray-500" : "bg-white text-black"}`} />
+              placeholder="Message..."
+              style={{
+                flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 20,
+                background: isDarkMode ? '#0A0A0F' : '#F7F5FF',
+                border: `1px solid ${border}`,
+                color: text, fontSize: 14, fontWeight: 500, outline: 'none',
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={e => e.target.style.borderColor = C.purple + '88'}
+              onBlur={e => e.target.style.borderColor = border}
+            />
 
-            <button onClick={sendMessage}
-              className="shrink-0 bg-[#05FFA1] text-black border-[3px] border-black px-3 sm:px-6 lg:px-8 py-2.5 sm:py-4 font-black uppercase text-xs sm:text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] active:translate-y-0.5 transition-all">Send</button>
+            <button onClick={sendMessage} style={{
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              background: message.trim() ? `linear-gradient(135deg, ${C.purple}, ${C.purpleDim})` : (isDarkMode ? C.darkHover : '#F0EEF8'),
+              border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: message.trim() ? `0 4px 12px ${C.purple}44` : 'none',
+              fontSize: 16,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M22 2L11 13" stroke={message.trim() ? "white" : mutedText} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke={message.trim() ? "white" : mutedText} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); }
+          30% { transform: translateY(-6px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: ${isDarkMode ? '#2A2A40' : '#D0CDE8'}; border-radius: 4px; }
+        .group:hover .opacity-0 { opacity: 1 !important; pointer-events: all !important; }
+      `}</style>
     </main>
   );
 }
