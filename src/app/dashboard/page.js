@@ -398,7 +398,6 @@ export default function ChatDashboard() {
       setUploadingImage(false);
     }
   };
-  };
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files[0];
@@ -671,4 +670,4 @@ export default function ChatDashboard() {
       </div>
     </main>
   );
-
+}
