@@ -450,8 +450,8 @@ export default function ChatDashboard() {
 
   const insertEmoji = (emoji) => { setMessage(prev => prev + emoji); setShowEmojiPicker(false); };
 
-  if (!mounted) return <div className="h-screen bg-[#FFFBEB]" />;
-  if (!myHandle) return <div className="h-screen bg-[#FFFBEB]" />;
+  if (!mounted) return <div style={{height: '100dvh'}} className="bg-[#FFFBEB]" />;
+  if (!myHandle) return <div style={{height: '100dvh'}} className="bg-[#FFFBEB]" />;
 
   const sidebarProps = {
     rooms, activeRoom, onJoin: attemptJoin,
@@ -463,7 +463,7 @@ export default function ChatDashboard() {
   };
 
   return (
-    <main className={`h-screen flex font-mono overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D] text-white" : "bg-[#FFFBEB] text-black"}`}>
+    <main style={{height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)'}} className={`flex font-mono overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D] text-white" : "bg-[#FFFBEB] text-black"}`}>
 
       {/* Modals */}
       <AnimatePresence>
@@ -505,7 +505,7 @@ export default function ChatDashboard() {
         {sidebarOpen && (
           <motion.div initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`fixed top-0 left-0 h-full w-72 z-40 border-r-[4px] border-black p-4 md:hidden ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+            className={`fixed top-0 left-0 w-72 z-40 border-r-[4px] border-black p-4 md:hidden ${isDarkMode ? "bg-[#161616]" : "bg-white"}`} style={{height: '100dvh'}}>
             <Sidebar {...sidebarProps} showClose={true} />
           </motion.div>
         )}
