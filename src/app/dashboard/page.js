@@ -123,6 +123,7 @@ export default function ChatDashboard() {
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const audioCtxRef = useRef(null);
 
   const [mounted, setMounted] = useState(false);
   const [myHandle, setMyHandle] = useState("");
@@ -138,6 +139,7 @@ export default function ChatDashboard() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [unreadRooms, setUnreadRooms] = useState(new Set());
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const [rooms, setRooms] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -213,10 +215,13 @@ export default function ChatDashboard() {
     socket.on("receive_message", (data) => {
       if (data.room === activeRoom.name) {
         setChatHistory(prev => [...prev, data]);
-        // Mark as seen immediately since we're in the room
         socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
+        // Play sound only for messages from others
+        if (data.author !== myHandle) playNotification();
       } else {
         setUnreadRooms(prev => new Set([...prev, data.room]));
+        // Also play sound for messages in other rooms
+        if (data.author !== myHandle) playNotification();
       }
     });
 
@@ -251,6 +256,35 @@ export default function ChatDashboard() {
   }, [myHandle, activeRoom.name]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
+
+  const playNotification = () => {
+    if (!soundEnabled) return;
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = audioCtxRef.current;
+
+      // Two-tone "ding" like WhatsApp
+      const playTone = (freq, startTime, duration, gain = 0.3) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(gain, startTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+
+      const now = ctx.currentTime;
+      playTone(880, now, 0.15, 0.25);       // first note
+      playTone(1100, now + 0.12, 0.2, 0.2); // second note slightly higher
+    } catch (e) {
+      // Audio not available — silently fail
+    }
+  };
 
   const handleExit = () => {
     localStorage.removeItem("vault_user");
@@ -441,6 +475,11 @@ export default function ChatDashboard() {
             <h1 className={`text-sm sm:text-xl lg:text-2xl font-black uppercase italic tracking-tighter truncate ${isDarkMode ? "text-[#B967FF]" : "text-black"}`}>{activeRoom.name}</h1>
           </div>
           <div className="flex gap-2 shrink-0 ml-2">
+            <button onClick={() => setSoundEnabled(prev => !prev)}
+              className={`text-[8px] font-black border-2 border-black px-2 py-1 transition-all ${soundEnabled ? (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black") : "bg-[#FF4B4B] text-white"}`}
+              title={soundEnabled ? "Mute notifications" : "Unmute notifications"}>
+              {soundEnabled ? "🔔" : "🔕"}
+            </button>
             <button onClick={() => { if (confirm("Clear all messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, { method: 'DELETE' }); }}
               className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">WIPE</button>
             <button onClick={handleExit} className="text-[8px] font-black bg-black text-white border-2 border-black px-2 py-1 hover:bg-[#FF4B4B] transition-all">EXIT</button>
