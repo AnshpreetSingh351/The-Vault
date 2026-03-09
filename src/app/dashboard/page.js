@@ -16,6 +16,52 @@ const EMOJI_LIST = [
   "💬","📢","🚀","🌈","⚡","💥","🎯","🏆","💎","🕹️",
 ];
 
+// Tick component: single=sending, double grey=delivered, double blue=seen
+function MessageTicks({ status }) {
+  if (status === 'sending') {
+    // Single grey tick
+    return (
+      <span className="inline-flex items-center ml-1 opacity-70" title="Sending">
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+          <path d="M1 5L4 8L11 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'delivered') {
+    // Double grey tick
+    return (
+      <span className="inline-flex items-center ml-1 opacity-70" title="Delivered">
+        <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
+          <path d="M1 5L4 8L11 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 5L9 8L16 1" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'seen') {
+    // Double blue tick
+    return (
+      <span className="inline-flex items-center ml-1" title="Seen">
+        <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
+          <path d="M1 5L4 8L11 1" stroke="#05FFA1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 5L9 8L16 1" stroke="#05FFA1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+    );
+  }
+  return null;
+}
+
+function getTickStatus(msg, myHandle) {
+  if (!msg._id || msg._id.startsWith('temp_')) return 'sending';
+  if (!msg.seenBy || msg.seenBy.length <= 1) return 'delivered';
+  // seen = at least one person OTHER than the author has seen it
+  const othersWhoSaw = (msg.seenBy || []).filter(u => u !== myHandle);
+  if (othersWhoSaw.length > 0) return 'seen';
+  return 'delivered';
+}
+
 function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose, unreadRooms }) {
   return (
     <div className="flex flex-col h-full">
@@ -28,13 +74,10 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
           {showClose && <button onClick={onClose} className="p-1.5 border-2 border-black font-black text-xs leading-none">✕</button>}
         </div>
       </div>
-
       <p className="mb-3 text-[10px] font-bold p-1 border-2 border-black bg-[#05FFA1] text-black uppercase text-center truncate">ID: {myHandle}</p>
-
       <button onClick={() => { onCreateClick(); onClose(); }} className="mb-4 w-full border-[3px] border-black p-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#B967FF] hover:text-white transition-all">
         + Build New Space
       </button>
-
       <div className="space-y-3 flex-1 overflow-y-auto pr-1">
         {rooms.map((room) => (
           <div key={room.name} className="group relative">
@@ -46,7 +89,7 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
               <div className="flex items-center gap-1.5 shrink-0">
                 {room.password && <span className="text-[10px]">🔒</span>}
                 {unreadRooms.has(room.name) && activeRoom.name !== room.name && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF4B4B] border-2 border-black animate-pulse shrink-0" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF4B4B] border-2 border-black animate-pulse" />
                 )}
               </div>
             </button>
@@ -56,7 +99,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
             )}
           </div>
         ))}
-
         <div className="mt-6 pt-4 border-t-4 border-black border-dashed">
           <h3 className={`text-[10px] font-black uppercase mb-3 ${isDarkMode ? "text-[#05FFA1]" : "opacity-60"}`}>Live ({onlineUsers.length})</h3>
           <div className="space-y-2">
@@ -151,11 +193,31 @@ export default function ChatDashboard() {
     const socket = socketRef.current;
     socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
 
+    // Mark messages as seen when joining room
+    socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
+
     socket.on("online_users", (users) => setOnlineUsers(users));
+
     socket.on("receive_message", (data) => {
-      if (data.room === activeRoom.name) setChatHistory(prev => [...prev, data]);
-      else setUnreadRooms(prev => new Set([...prev, data.room]));
+      if (data.room === activeRoom.name) {
+        setChatHistory(prev => [...prev, data]);
+        // Mark as seen immediately since we're in the room
+        socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
+      } else {
+        setUnreadRooms(prev => new Set([...prev, data.room]));
+      }
     });
+
+    // Server confirms our message was saved — replace temp with real
+    socket.on("message_delivered", ({ tempId, message: savedMsg }) => {
+      setChatHistory(prev => prev.map(m => m._id === tempId ? savedMsg : m));
+    });
+
+    // Update seenBy on any message
+    socket.on("message_seen_update", ({ _id, seenBy }) => {
+      setChatHistory(prev => prev.map(m => m._id === _id ? { ...m, seenBy } : m));
+    });
+
     socket.on("message_deleted", (id) => setChatHistory(prev => prev.filter(m => m._id !== id)));
     socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
     socket.on("user_typing", (data) => {
@@ -171,7 +233,8 @@ export default function ChatDashboard() {
     return () => {
       socket.off("online_users"); socket.off("receive_message"); socket.off("message_deleted");
       socket.off("user_typing"); socket.off("message_edited"); socket.off("room_created");
-      socket.off("room_deleted"); socket.off("room_cleared");
+      socket.off("room_deleted"); socket.off("room_cleared"); socket.off("message_delivered");
+      socket.off("message_seen_update");
     };
   }, [myHandle, activeRoom.name]);
 
@@ -234,10 +297,10 @@ export default function ChatDashboard() {
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      socketRef.current.emit("send_message", {
-        room: activeRoom.name, author: myHandle, image: reader.result,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+      const tempId = `temp_${Date.now()}`;
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, image: reader.result, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
+      setChatHistory(prev => [...prev, tempMsg]);
+      socketRef.current.emit("send_message", { ...tempMsg, tempId });
     };
     reader.readAsDataURL(file);
   };
@@ -246,7 +309,6 @@ export default function ChatDashboard() {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 50 * 1024 * 1024) return alert("Video must be under 50MB!");
-
     setUploadingVideo(true);
     try {
       const formData = new FormData();
@@ -254,12 +316,12 @@ export default function ChatDashboard() {
       const res = await fetch(`${API}/api/upload/video`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
-      socketRef.current.emit("send_message", {
-        room: activeRoom.name, author: myHandle, video: url,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+      const tempId = `temp_${Date.now()}`;
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, video: url, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
+      setChatHistory(prev => [...prev, tempMsg]);
+      socketRef.current.emit("send_message", { ...tempMsg, tempId });
     } catch (err) {
-      alert("Video upload failed. Try a smaller file.");
+      alert("Video upload failed.");
     } finally {
       setUploadingVideo(false);
       e.target.value = "";
@@ -268,10 +330,12 @@ export default function ChatDashboard() {
 
   const sendMessage = () => {
     if (message.trim() !== "" && socketRef.current) {
-      socketRef.current.emit("send_message", {
-        room: activeRoom.name, author: myHandle, text: message,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+      const tempId = `temp_${Date.now()}`;
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Add optimistically with temp ID (single tick = sending)
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, text: message, time, seenBy: [myHandle] };
+      setChatHistory(prev => [...prev, tempMsg]);
+      socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, text: message, time, tempId });
       setMessage("");
     }
   };
@@ -387,7 +451,7 @@ export default function ChatDashboard() {
                         <button key={emoji} onClick={() => handleReaction(msg._id, emoji)} className="hover:scale-125 transition-transform text-xs active:scale-90">{emoji}</button>
                       ))}
                     </div>
-                    {msg.author === myHandle && !editingId && (
+                    {msg.author === myHandle && !editingId && !msg._id?.startsWith('temp_') && (
                       <>
                         <button onClick={() => { setEditingId(msg._id); setEditText(msg.text); }} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#05FFA1]">✎</button>
                         <button onClick={() => { if (confirm("Delete?")) fetch(`${API}/api/messages/${msg._id}`, { method: 'DELETE' }); }} className="bg-white border-2 border-black rounded p-0.5 text-[8px] text-black hover:bg-[#FF4B4B]">🗑️</button>
@@ -397,18 +461,8 @@ export default function ChatDashboard() {
 
                   <p className={`text-[9px] sm:text-[10px] font-black uppercase mb-1 ${isDarkMode ? "text-[#05FFA1]" : "opacity-50"}`}>{msg.author} • {msg.time}</p>
 
-                  {/* Image */}
                   {msg.image && <img src={msg.image} className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />}
-
-                  {/* Video */}
-                  {msg.video && (
-                    <video
-                      src={msg.video}
-                      controls
-                      className="mb-2 border-2 border-black w-full max-h-48 sm:max-h-64 rounded-sm bg-black"
-                      style={{ maxWidth: '100%' }}
-                    />
-                  )}
+                  {msg.video && <video src={msg.video} controls className="mb-2 border-2 border-black w-full max-h-48 sm:max-h-64 rounded-sm bg-black" />}
 
                   {editingId === msg._id ? (
                     <div className="flex flex-col gap-2">
@@ -421,7 +475,21 @@ export default function ChatDashboard() {
                     </div>
                   ) : (
                     <>
-                      {msg.text && <p className="font-bold text-sm sm:text-base lg:text-lg break-words whitespace-pre-wrap leading-tight pr-8 sm:pr-10">{msg.text}</p>}
+                      {msg.text && (
+                        <p className="font-bold text-sm sm:text-base lg:text-lg break-words whitespace-pre-wrap leading-tight pr-2">
+                          {msg.text}
+                          {/* Ticks inline after text — only for sender */}
+                          {msg.author === myHandle && (
+                            <MessageTicks status={getTickStatus(msg, myHandle)} />
+                          )}
+                        </p>
+                      )}
+                      {/* Ticks for image/video messages */}
+                      {(msg.image || msg.video) && msg.author === myHandle && (
+                        <div className="flex justify-end mt-1">
+                          <MessageTicks status={getTickStatus(msg, myHandle)} />
+                        </div>
+                      )}
                       {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {Object.entries(msg.reactions).map(([emoji, users]) => (
@@ -456,8 +524,6 @@ export default function ChatDashboard() {
 
         {/* Input bar */}
         <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-
-          {/* Emoji picker */}
           <AnimatePresence>
             {showEmojiPicker && (
               <motion.div ref={emojiPickerRef}
@@ -470,7 +536,6 @@ export default function ChatDashboard() {
             )}
           </AnimatePresence>
 
-          {/* Video uploading indicator */}
           {uploadingVideo && (
             <div className={`mb-2 p-2 border-2 border-black text-[10px] font-black uppercase flex items-center gap-2 ${isDarkMode ? "bg-[#222] text-[#05FFA1]" : "bg-[#f0f0f0] text-black"}`}>
               <div className="w-2 h-2 rounded-full bg-[#B967FF] animate-pulse" />
@@ -479,24 +544,17 @@ export default function ChatDashboard() {
           )}
 
           <div className="flex gap-2 items-center">
-            {/* Hidden inputs */}
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
             <input type="file" ref={videoInputRef} onChange={handleVideoUpload} className="hidden" accept="video/*" />
 
-            {/* Image button */}
             <button onClick={() => fileInputRef.current.click()}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
-              title="Send image">📷</button>
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}>📷</button>
 
-            {/* Video button */}
             <button onClick={() => videoInputRef.current.click()} disabled={uploadingVideo}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed ${isDarkMode ? "bg-[#222] text-white hover:bg-[#B967FF]" : "bg-white hover:bg-[#B967FF] hover:text-white"}`}
-              title="Send video (max 50MB)">🎥</button>
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 disabled:opacity-40 ${isDarkMode ? "bg-[#222] text-white hover:bg-[#B967FF]" : "bg-white hover:bg-[#B967FF] hover:text-white"}`}>🎥</button>
 
-            {/* Emoji button */}
             <button onClick={() => setShowEmojiPicker(prev => !prev)}
-              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${showEmojiPicker ? "bg-[#FFD700]" : (isDarkMode ? "bg-[#222] text-white hover:bg-[#333]" : "bg-white hover:bg-[#FFD700]")}`}
-              title="Emoji picker">😊</button>
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${showEmojiPicker ? "bg-[#FFD700]" : (isDarkMode ? "bg-[#222] text-white hover:bg-[#333]" : "bg-white hover:bg-[#FFD700]")}`}>😊</button>
 
             <input type="text" value={message}
               onChange={(e) => { setMessage(e.target.value); handleTyping(); }}

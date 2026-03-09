@@ -8,7 +8,6 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
 
-// Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -19,10 +18,9 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Multer — store in memory, then stream to Cloudinary
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('video/')) cb(null, true);
     else cb(new Error('Only video files allowed'));
@@ -51,6 +49,8 @@ const Message = mongoose.model('Message', new mongoose.Schema({
   video: String,
   time: String,
   reactions: { type: Object, default: {} },
+  // 'sent' = saved to DB, 'seen' = recipient opened the room
+  seenBy: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 }));
 
@@ -59,38 +59,32 @@ const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL || "http://localhost:3000" },
   maxHttpBufferSize: 1e7
 });
-const activeUsers = {};
 
-// Video upload → Cloudinary
+// Track socket → { handle, room }
+const activeUsers = {};      // socketId → handle
+const userRooms = {};        // socketId → current room
+
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
-
   const uploadStream = cloudinary.uploader.upload_stream(
     { resource_type: 'video', folder: 'the-vault' },
     (error, result) => {
-      if (error) {
-        console.error('Cloudinary error:', error);
-        return res.status(500).json({ error: 'Upload to Cloudinary failed' });
-      }
+      if (error) return res.status(500).json({ error: 'Upload to Cloudinary failed' });
       res.json({ url: result.secure_url });
     }
   );
-
   streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
 });
 
 app.get('/api/rooms', async (req, res) => {
-  try {
-    const rooms = await Room.find();
-    res.json(rooms);
-  } catch (err) { res.status(500).json({ error: "Failed to fetch rooms" }); }
+  try { res.json(await Room.find()); }
+  catch (err) { res.status(500).json({ error: "Failed to fetch rooms" }); }
 });
 
 app.post('/api/rooms', async (req, res) => {
   try {
     const { name, password } = req.body;
-    const existing = await Room.findOne({ name });
-    if (existing) return res.status(400).json({ error: "Name taken" });
+    if (await Room.findOne({ name })) return res.status(400).json({ error: "Name taken" });
     const newRoom = new Room({ name, password });
     await newRoom.save();
     io.emit('room_created', newRoom);
@@ -115,10 +109,8 @@ app.delete('/api/rooms/:name', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const existing = await User.findOne({ username });
-    if (existing) return res.status(400).json({ error: "Username already taken!" });
-    const newUser = new User({ username, password });
-    await newUser.save();
+    if (await User.findOne({ username })) return res.status(400).json({ error: "Username already taken!" });
+    await new User({ username, password }).save();
     res.status(201).json({ message: "Account created!" });
   } catch (err) { res.status(500).json({ error: "DB Error" }); }
 });
@@ -164,12 +156,29 @@ app.delete('/api/messages/clear/:room', async (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  socket.on('join_vault', (data) => {
+
+  socket.on('join_vault', async (data) => {
     const handle = typeof data === 'object' ? data.handle : data;
-    const room = data.room || "General Vibes #1";
+    const room = (typeof data === 'object' ? data.room : null) || "General Vibes #1";
+
     activeUsers[socket.id] = handle;
+    userRooms[socket.id] = room;
     socket.join(room);
     io.emit('online_users', Object.values(activeUsers));
+
+    // Mark all unread messages in this room as seen by this user
+    try {
+      const unseen = await Message.find({ room, seenBy: { $ne: handle }, author: { $ne: handle } });
+      if (unseen.length > 0) {
+        await Message.updateMany(
+          { room, seenBy: { $ne: handle }, author: { $ne: handle } },
+          { $addToSet: { seenBy: handle } }
+        );
+        // Notify room that these messages are now seen
+        const updatedMsgs = await Message.find({ _id: { $in: unseen.map(m => m._id) } });
+        updatedMsgs.forEach(msg => io.to(room).emit('message_seen_update', { _id: msg._id, seenBy: msg.seenBy }));
+      }
+    } catch (err) { console.error("Seen update error:", err); }
   });
 
   socket.on('typing', (data) => {
@@ -178,9 +187,38 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', async (data) => {
     try {
-      const savedMsg = await new Message({ ...data, reactions: {} }).save();
-      io.emit('receive_message', savedMsg);
+      // Message starts with author already in seenBy (they sent it)
+      const savedMsg = await new Message({ ...data, reactions: {}, seenBy: [data.author] }).save();
+      // Emit to sender first with 'sent' status confirmed (double tick)
+      socket.emit('message_delivered', { tempId: data.tempId, message: savedMsg });
+      // Broadcast to room
+      socket.to(data.room).emit('receive_message', savedMsg);
+
+      // Check if any other users are currently in this room — mark as seen immediately
+      const roomSockets = await io.in(data.room).fetchSockets();
+      const othersInRoom = roomSockets
+        .filter(s => s.id !== socket.id)
+        .map(s => activeUsers[s.id])
+        .filter(Boolean);
+
+      if (othersInRoom.length > 0) {
+        await Message.findByIdAndUpdate(savedMsg._id, { $addToSet: { seenBy: { $each: othersInRoom } } });
+        const updated = await Message.findById(savedMsg._id);
+        io.to(data.room).emit('message_seen_update', { _id: updated._id, seenBy: updated.seenBy });
+      }
     } catch (err) { console.error("❌ SAVE ERROR:", err); }
+  });
+
+  // Client tells server user opened/is viewing a room
+  socket.on('mark_seen', async ({ room, handle }) => {
+    try {
+      await Message.updateMany(
+        { room, seenBy: { $ne: handle }, author: { $ne: handle } },
+        { $addToSet: { seenBy: handle } }
+      );
+      const updated = await Message.find({ room, seenBy: handle, author: { $ne: handle } }).select('_id seenBy');
+      updated.forEach(msg => io.to(room).emit('message_seen_update', { _id: msg._id, seenBy: msg.seenBy }));
+    } catch (err) { console.error("mark_seen error:", err); }
   });
 
   socket.on('react_message', async ({ messageId, emoji, handle }) => {
@@ -200,6 +238,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     delete activeUsers[socket.id];
+    delete userRooms[socket.id];
     io.emit('online_users', Object.values(activeUsers));
   });
 });
