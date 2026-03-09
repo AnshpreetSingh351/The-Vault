@@ -7,7 +7,16 @@ import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose }) {
+const EMOJI_LIST = [
+  "😀","😂","😍","🥰","😎","🤔","😅","😭","😡","🥱",
+  "👍","👎","👏","🙌","🤝","🙏","💪","✌️","🤞","👀",
+  "❤️","🔥","💯","✨","🎉","🎊","💀","👻","🤡","💩",
+  "🍕","🍔","🍟","🌮","🍜","🍣","🍦","🍩","🧁","🍺",
+  "😏","🫡","🫠","😤","🤯","🥳","😇","🤩","😴","🫶",
+  "💬","📢","🚀","🌈","⚡","💥","🎯","🏆","💎","🕹️",
+];
+
+function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose, unreadRooms }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-2 border-b-[4px] border-black pb-2">
@@ -48,7 +57,13 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
               }`}
             >
               <span className="truncate mr-2">{room.name}</span>
-              {room.password && <span className="text-[10px] shrink-0">🔒</span>}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {room.password && <span className="text-[10px]">🔒</span>}
+                {/* Notification dot */}
+                {unreadRooms.has(room.name) && activeRoom.name !== room.name && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF4B4B] border-2 border-black animate-pulse shrink-0" />
+                )}
+              </div>
             </button>
             {room.name !== "General Vibes #1" && (
               <button
@@ -85,6 +100,7 @@ export default function ChatDashboard() {
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
 
   const [mounted, setMounted] = useState(false);
   const [myHandle, setMyHandle] = useState("");
@@ -97,6 +113,8 @@ export default function ChatDashboard() {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [unreadRooms, setUnreadRooms] = useState(new Set()); // rooms with unread messages
 
   const [rooms, setRooms] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -106,18 +124,28 @@ export default function ChatDashboard() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deletePassword, setDeletePassword] = useState("");
 
-  // First effect: just handle mount + auth check
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Mount + auth
   useEffect(() => {
     setMounted(true);
     const savedName = localStorage.getItem("vault_user");
     if (!savedName) { router.replace('/'); return; }
     setMyHandle(savedName);
-
     const savedTheme = localStorage.getItem("vault_theme");
     if (savedTheme === "dark") setIsDarkMode(true);
   }, [router]);
 
-  // Second effect: load data + socket — only after we have a handle
+  // Data + socket
   useEffect(() => {
     if (!myHandle) return;
 
@@ -144,13 +172,25 @@ export default function ChatDashboard() {
     loadHistory();
     loadRooms();
 
+    // Clear unread for current room when switching into it
+    setUnreadRooms(prev => {
+      const next = new Set(prev);
+      next.delete(activeRoom.name);
+      return next;
+    });
+
     if (!socketRef.current) socketRef.current = io(API);
     const socket = socketRef.current;
     socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
 
     socket.on("online_users", (users) => setOnlineUsers(users));
     socket.on("receive_message", (data) => {
-      if (data.room === activeRoom.name) setChatHistory(prev => [...prev, data]);
+      if (data.room === activeRoom.name) {
+        setChatHistory(prev => [...prev, data]);
+      } else {
+        // Message in another room — mark as unread
+        setUnreadRooms(prev => new Set([...prev, data.room]));
+      }
     });
     socket.on("message_deleted", (id) => setChatHistory(prev => prev.filter(m => m._id !== id)));
     socket.on("message_edited", (updated) => setChatHistory(prev => prev.map(m => m._id === updated._id ? updated : m)));
@@ -212,6 +252,12 @@ export default function ChatDashboard() {
     if (!room.password || room.name === "General Vibes #1") {
       setActiveRoom(room);
       setSidebarOpen(false);
+      // Clear unread when joining
+      setUnreadRooms(prev => {
+        const next = new Set(prev);
+        next.delete(room.name);
+        return next;
+      });
     } else {
       setRoomToJoin(room);
     }
@@ -220,6 +266,11 @@ export default function ChatDashboard() {
   const verifyPassword = () => {
     if (joinPassword === roomToJoin.password) {
       setActiveRoom(roomToJoin);
+      setUnreadRooms(prev => {
+        const next = new Set(prev);
+        next.delete(roomToJoin.name);
+        return next;
+      });
       setRoomToJoin(null);
       setJoinPassword("");
       setSidebarOpen(false);
@@ -270,9 +321,12 @@ export default function ChatDashboard() {
     setEditingId(null);
   };
 
-  // Don't render anything until mounted (avoids SSR/localStorage mismatch)
+  const insertEmoji = (emoji) => {
+    setMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   if (!mounted) return <div className="h-screen bg-[#FFFBEB]" />;
-  // If mounted but no handle, router.replace('/') is already called — show nothing
   if (!myHandle) return <div className="h-screen bg-[#FFFBEB]" />;
 
   const sidebarProps = {
@@ -281,7 +335,7 @@ export default function ChatDashboard() {
     onCreateClick: () => setShowCreateModal(true),
     onClose: () => setSidebarOpen(false),
     onToggleTheme: toggleTheme,
-    isDarkMode, myHandle, onlineUsers,
+    isDarkMode, myHandle, onlineUsers, unreadRooms,
   };
 
   return (
@@ -460,24 +514,60 @@ export default function ChatDashboard() {
         </div>
 
         {/* Input bar */}
-        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black flex gap-2 items-center shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-          <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-          <button
-            onClick={() => fileInputRef.current.click()}
-            className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
-          >📷</button>
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => { setMessage(e.target.value); handleTyping(); }}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Type a message..."
-            className={`flex-1 min-w-0 border-[3px] border-black p-2.5 sm:p-4 text-sm sm:text-base font-bold outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${isDarkMode ? "bg-[#222] text-white placeholder-gray-500" : "bg-white text-black"}`}
-          />
-          <button
-            onClick={sendMessage}
-            className="shrink-0 bg-[#05FFA1] text-black border-[3px] border-black px-3 sm:px-6 lg:px-8 py-2.5 sm:py-4 font-black uppercase text-xs sm:text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] active:translate-y-0.5 transition-all"
-          >Send</button>
+        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+          
+          {/* Emoji Picker */}
+          <AnimatePresence>
+            {showEmojiPicker && (
+              <motion.div
+                ref={emojiPickerRef}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className={`mb-2 p-3 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] grid grid-cols-10 sm:grid-cols-12 gap-1 max-h-36 overflow-y-auto ${isDarkMode ? "bg-[#222]" : "bg-white"}`}
+              >
+                {EMOJI_LIST.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => insertEmoji(emoji)}
+                    className="text-lg sm:text-xl hover:scale-125 active:scale-95 transition-transform p-0.5"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex gap-2 items-center">
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+            
+            {/* Image upload */}
+            <button
+              onClick={() => fileInputRef.current.click()}
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
+            >📷</button>
+
+            {/* Emoji picker toggle */}
+            <button
+              onClick={() => setShowEmojiPicker(prev => !prev)}
+              className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${showEmojiPicker ? "bg-[#FFD700]" : (isDarkMode ? "bg-[#222] text-white hover:bg-[#333]" : "bg-white hover:bg-[#FFD700]")}`}
+            >😊</button>
+
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => { setMessage(e.target.value); handleTyping(); }}
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              placeholder="Type a message..."
+              className={`flex-1 min-w-0 border-[3px] border-black p-2.5 sm:p-4 text-sm sm:text-base font-bold outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${isDarkMode ? "bg-[#222] text-white placeholder-gray-500" : "bg-white text-black"}`}
+            />
+
+            <button
+              onClick={sendMessage}
+              className="shrink-0 bg-[#05FFA1] text-black border-[3px] border-black px-3 sm:px-6 lg:px-8 py-2.5 sm:py-4 font-black uppercase text-xs sm:text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] active:translate-y-0.5 transition-all"
+            >Send</button>
+          </div>
         </div>
       </div>
     </main>
