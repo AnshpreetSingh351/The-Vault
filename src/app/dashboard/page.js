@@ -7,6 +7,79 @@ import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+// Sidebar extracted as a proper standalone component outside ChatDashboard
+function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, onToggleTheme, isDarkMode, myHandle, onlineUsers, showClose }) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-2 border-b-[4px] border-black pb-2">
+        <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter">Spaces</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleTheme}
+            className={`p-2 rounded-full border-2 border-black transition-all hover:scale-110 active:scale-95 ${isDarkMode ? "bg-[#FFD700]" : "bg-[#2D3436]"}`}
+          >
+            {isDarkMode ? "☀️" : "🌙"}
+          </button>
+          {showClose && (
+            <button onClick={onClose} className="p-1.5 border-2 border-black font-black text-xs leading-none">✕</button>
+          )}
+        </div>
+      </div>
+
+      <p className="mb-3 text-[10px] font-bold p-1 border-2 border-black bg-[#05FFA1] text-black uppercase text-center truncate">
+        ID: {myHandle}
+      </p>
+
+      <button
+        onClick={() => { onCreateClick(); onClose(); }}
+        className="mb-4 w-full border-[3px] border-black p-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#B967FF] hover:text-white transition-all"
+      >
+        + Build New Space
+      </button>
+
+      <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+        {rooms.map((room) => (
+          <div key={room.name} className="group relative">
+            <button
+              onClick={() => onJoin(room)}
+              className={`w-full border-[3px] border-black p-3 font-bold transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center text-sm ${
+                activeRoom.name === room.name
+                  ? "bg-[#B967FF] text-white"
+                  : (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black")
+              }`}
+            >
+              <span className="truncate mr-2">{room.name}</span>
+              {room.password && <span className="text-[10px] shrink-0">🔒</span>}
+            </button>
+            {room.name !== "General Vibes #1" && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(room.name); }}
+                className="absolute -right-2 top-1 opacity-0 group-hover:opacity-100 bg-[#FF4B4B] text-white border-2 border-black rounded-full w-5 h-5 flex items-center justify-center text-[8px] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all z-20"
+              >🗑️</button>
+            )}
+          </div>
+        ))}
+
+        <div className="mt-6 pt-4 border-t-4 border-black border-dashed">
+          <h3 className={`text-[10px] font-black uppercase mb-3 ${isDarkMode ? "text-[#05FFA1]" : "opacity-60"}`}>
+            Live ({onlineUsers.length})
+          </h3>
+          <div className="space-y-2">
+            {onlineUsers.map((user, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#05FFA1] animate-pulse border border-black shrink-0" />
+                <span className="text-xs font-bold uppercase tracking-wider truncate">
+                  {typeof user === 'object' ? user.handle : user}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatDashboard() {
   const router = useRouter();
   const socketRef = useRef(null);
@@ -192,68 +265,14 @@ export default function ChatDashboard() {
 
   if (!myHandle) return <div className={`h-screen ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#FFFBEB]"}`} />;
 
-  // Sidebar content shared between mobile drawer and desktop panel
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-2 border-b-[4px] border-black pb-2">
-        <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter">Spaces</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={toggleTheme} className={`p-2 rounded-full border-2 border-black transition-all hover:scale-110 active:scale-95 ${isDarkMode ? "bg-[#FFD700]" : "bg-[#2D3436]"}`}>
-            {isDarkMode ? "☀️" : "🌙"}
-          </button>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1.5 border-2 border-black font-black text-xs leading-none">✕</button>
-        </div>
-      </div>
-
-      <p className="mb-3 text-[10px] font-bold p-1 border-2 border-black bg-[#05FFA1] text-black uppercase text-center truncate">
-        ID: {myHandle}
-      </p>
-      <button
-        onClick={() => { setShowCreateModal(true); setSidebarOpen(false); }}
-        className="mb-4 w-full border-[3px] border-black p-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#B967FF] hover:text-white transition-all"
-      >
-        + Build New Space
-      </button>
-
-      <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-        {rooms.map((room) => (
-          <div key={room.name} className="group relative">
-            <button
-              onClick={() => attemptJoin(room)}
-              className={`w-full border-[3px] border-black p-3 font-bold transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center text-sm ${activeRoom.name === room.name
-                ? "bg-[#B967FF] text-white"
-                : (isDarkMode ? "bg-[#222] text-white" : "bg-white text-black")}`}
-            >
-              <span className="truncate mr-2">{room.name}</span>
-              {room.password && <span className="text-[10px] shrink-0">🔒</span>}
-            </button>
-            {room.name !== "General Vibes #1" && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setRoomToDelete(room.name); }}
-                className="absolute -right-2 top-1 opacity-0 group-hover:opacity-100 bg-[#FF4B4B] text-white border-2 border-black rounded-full w-5 h-5 flex items-center justify-center text-[8px] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all z-20"
-              >🗑️</button>
-            )}
-          </div>
-        ))}
-
-        <div className="mt-6 pt-4 border-t-4 border-black border-dashed">
-          <h3 className={`text-[10px] font-black uppercase mb-3 ${isDarkMode ? "text-[#05FFA1]" : "opacity-60"}`}>
-            Live ({onlineUsers.length})
-          </h3>
-          <div className="space-y-2">
-            {onlineUsers.map((user, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#05FFA1] animate-pulse border border-black shrink-0" />
-                <span className="text-xs font-bold uppercase tracking-wider truncate">
-                  {typeof user === 'object' ? user.handle : user}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const sidebarProps = {
+    rooms, activeRoom, onJoin: attemptJoin,
+    onDelete: (name) => setRoomToDelete(name),
+    onCreateClick: () => setShowCreateModal(true),
+    onClose: () => setSidebarOpen(false),
+    onToggleTheme: toggleTheme,
+    isDarkMode, myHandle, onlineUsers,
+  };
 
   return (
     <main className={`h-screen flex font-mono overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D] text-white" : "bg-[#FFFBEB] text-black"}`}>
@@ -312,23 +331,22 @@ export default function ChatDashboard() {
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className={`fixed top-0 left-0 h-full w-72 z-40 border-r-[4px] border-black p-4 md:hidden ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}
           >
-            <SidebarContent />
+            <Sidebar {...sidebarProps} showClose={true} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Desktop sidebar — always visible on md+ */}
-      <div className={`hidden md:flex w-72 lg:w-80 border-r-[4px] border-black p-5 lg:p-6 flex-col z-20 h-full transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
-        <SidebarContent />
+      {/* Desktop sidebar — always visible */}
+      <div className={`hidden md:flex w-72 lg:w-80 border-r-[4px] border-black p-5 lg:p-6 flex-col z-20 h-full transition-colors duration-500 shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+        <Sidebar {...sidebarProps} showClose={false} />
       </div>
 
       {/* Main chat */}
       <div className={`flex-1 flex flex-col h-full relative transition-colors duration-500 min-w-0 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-white"}`}>
 
         {/* Header */}
-        <div className={`border-b-[4px] border-black px-3 py-3 sm:px-5 sm:py-4 flex justify-between items-center z-10 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+        <div className={`border-b-[4px] border-black px-3 py-3 sm:px-5 sm:py-4 flex justify-between items-center z-10 shrink-0 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            {/* Hamburger menu — mobile only */}
             <button
               onClick={() => setSidebarOpen(true)}
               className={`md:hidden shrink-0 border-[3px] border-black px-2 py-1.5 font-black text-base leading-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-all ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
@@ -342,14 +360,11 @@ export default function ChatDashboard() {
               onClick={() => { if (confirm("Clear all messages?")) fetch(`${API}/api/messages/clear/${encodeURIComponent(activeRoom.name)}`, { method: 'DELETE' }); }}
               className="text-[8px] font-black bg-[#FF4B4B] text-white border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >WIPE</button>
-            <button
-              onClick={handleExit}
-              className="text-[8px] font-black bg-black text-white border-2 border-black px-2 py-1 hover:bg-[#FF4B4B] transition-all"
-            >EXIT</button>
+            <button onClick={handleExit} className="text-[8px] font-black bg-black text-white border-2 border-black px-2 py-1 hover:bg-[#FF4B4B] transition-all">EXIT</button>
           </div>
         </div>
 
-        {/* Messages area */}
+        {/* Messages */}
         <div className={`flex-1 px-3 py-4 sm:p-6 lg:p-8 overflow-y-auto transition-colors duration-500 ${isDarkMode ? "bg-[#0D0D0D]" : "bg-[#f9f9f9]"}`}>
           <AnimatePresence initial={false}>
             {chatHistory.map((msg) => (
@@ -361,11 +376,11 @@ export default function ChatDashboard() {
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
                 className={`group flex flex-col mb-4 sm:mb-6 ${msg.author === myHandle ? "items-end" : "items-start"}`}
               >
-                <div className={`relative border-[3px] border-black p-3 sm:p-4 max-w-[85%] sm:max-w-sm lg:max-w-md transition-all duration-300 ${msg.author === myHandle
-                  ? "bg-[#B967FF] text-white shadow-[4px_4px_0px_0px_rgba(185,103,255,0.3)]"
-                  : (isDarkMode ? "bg-[#1F1F1F] text-white shadow-[4px_4px_0px_0px_rgba(5,255,161,0.2)]" : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]")
-                  }`}>
-
+                <div className={`relative border-[3px] border-black p-3 sm:p-4 max-w-[85%] sm:max-w-sm lg:max-w-md transition-all duration-300 ${
+                  msg.author === myHandle
+                    ? "bg-[#B967FF] text-white shadow-[4px_4px_0px_0px_rgba(185,103,255,0.3)]"
+                    : (isDarkMode ? "bg-[#1F1F1F] text-white shadow-[4px_4px_0px_0px_rgba(5,255,161,0.2)]" : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]")
+                }`}>
                   <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
                     <div className={`flex gap-1 border-2 border-black rounded-full px-2 py-0.5 mr-1 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
                       {['👍', '❤️', '🔥', '😂'].map(emoji => (
@@ -383,9 +398,7 @@ export default function ChatDashboard() {
                   <p className={`text-[9px] sm:text-[10px] font-black uppercase mb-1 ${isDarkMode ? "text-[#05FFA1]" : "opacity-50"}`}>
                     {msg.author} • {msg.time}
                   </p>
-                  {msg.image && (
-                    <img src={msg.image} className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />
-                  )}
+                  {msg.image && <img src={msg.image} className="mb-2 border-2 border-black max-h-48 sm:max-h-64 object-cover w-full rounded-sm" />}
 
                   {editingId === msg._id ? (
                     <div className="flex flex-col gap-2">
@@ -407,13 +420,10 @@ export default function ChatDashboard() {
                       {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {Object.entries(msg.reactions).map(([emoji, users]) => (
-                            <div
-                              key={emoji}
-                              onClick={() => handleReaction(msg._id, emoji)}
-                              className={`flex items-center gap-1 border-2 border-black rounded-md px-1.5 py-0.5 text-[10px] cursor-pointer active:scale-95 ${users.includes(myHandle)
-                                ? "bg-[#05FFA1] text-black"
-                                : (isDarkMode ? "bg-[#333] text-white" : "bg-gray-100 text-black")}`}
-                            >
+                            <div key={emoji} onClick={() => handleReaction(msg._id, emoji)}
+                              className={`flex items-center gap-1 border-2 border-black rounded-md px-1.5 py-0.5 text-[10px] cursor-pointer active:scale-95 ${
+                                users.includes(myHandle) ? "bg-[#05FFA1] text-black" : (isDarkMode ? "bg-[#333] text-white" : "bg-gray-100 text-black")
+                              }`}>
                               <span>{emoji}</span><span className="font-black">{users.length}</span>
                             </div>
                           ))}
@@ -440,13 +450,12 @@ export default function ChatDashboard() {
         </div>
 
         {/* Input bar */}
-        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black flex gap-2 items-center z-10 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
+        <div className={`px-3 py-2 sm:p-4 lg:p-6 border-t-[4px] border-black flex gap-2 items-center z-10 shrink-0 transition-colors duration-500 ${isDarkMode ? "bg-[#161616]" : "bg-white"}`}>
           <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
           <button
             onClick={() => fileInputRef.current.click()}
             className={`shrink-0 border-[3px] border-black p-2 sm:p-3 text-base hover:bg-[#01CDFE] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-y-0.5 ${isDarkMode ? "bg-[#222] text-white" : "bg-white"}`}
           >📷</button>
-
           <input
             type="text"
             value={message}
@@ -455,7 +464,6 @@ export default function ChatDashboard() {
             placeholder="Type a message..."
             className={`flex-1 min-w-0 border-[3px] border-black p-2.5 sm:p-4 text-sm sm:text-base font-bold outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all ${isDarkMode ? "bg-[#222] text-white placeholder-gray-500" : "bg-white text-black"}`}
           />
-
           <button
             onClick={sendMessage}
             className="shrink-0 bg-[#05FFA1] text-black border-[3px] border-black px-3 sm:px-6 lg:px-8 py-2.5 sm:py-4 font-black uppercase text-xs sm:text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] active:translate-y-0.5 transition-all"
