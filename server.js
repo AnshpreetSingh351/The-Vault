@@ -57,7 +57,7 @@ const Message = mongoose.model('Message', new mongoose.Schema({
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL || "http://localhost:3000" },
-  maxHttpBufferSize: 1e7
+  maxHttpBufferSize: 5e7  // 50MB
 });
 
 // Track socket → { handle, room }

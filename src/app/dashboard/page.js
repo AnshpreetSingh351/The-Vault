@@ -216,12 +216,10 @@ export default function ChatDashboard() {
       if (data.room === activeRoom.name) {
         setChatHistory(prev => [...prev, data]);
         socket.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
-        // Play sound only for messages from others
+        // Only play sound if message is from someone else (not while you're chatting)
         if (data.author !== myHandle) playNotification();
       } else {
         setUnreadRooms(prev => new Set([...prev, data.room]));
-        // Also play sound for messages in other rooms
-        if (data.author !== myHandle) playNotification();
       }
     });
 
@@ -262,28 +260,30 @@ export default function ChatDashboard() {
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
 
-      // Two-tone "ding" like WhatsApp
-      const playTone = (freq, startTime, duration, gain = 0.3) => {
+      // Punchy pop/bubble notification sound — higher volume
+      const playTone = (freq, startTime, duration, gainVal) => {
         const osc = ctx.createOscillator();
         const gainNode = ctx.createGain();
+        const compressor = ctx.createDynamicsCompressor();
         osc.connect(gainNode);
-        gainNode.connect(ctx.destination);
+        gainNode.connect(compressor);
+        compressor.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.5, startTime + 0.05);
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(gain, startTime + 0.01);
+        gainNode.gain.linearRampToValueAtTime(gainVal, startTime + 0.01);
         gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
         osc.start(startTime);
-        osc.stop(startTime + duration);
+        osc.stop(startTime + duration + 0.01);
       };
 
       const now = ctx.currentTime;
-      playTone(880, now, 0.15, 0.25);       // first note
-      playTone(1100, now + 0.12, 0.2, 0.2); // second note slightly higher
-    } catch (e) {
-      // Audio not available — silently fail
-    }
+      playTone(520, now, 0.12, 0.8);
+      playTone(780, now + 0.1, 0.18, 0.7);
+    } catch (e) { /* silently fail */ }
   };
 
   const handleExit = () => {
@@ -345,14 +345,33 @@ export default function ChatDashboard() {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
+    e.target.value = "";
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      // Compress image using canvas — max 800px wide, quality 0.7
+      const canvas = document.createElement('canvas');
+      const maxW = 800;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const compressed = canvas.toDataURL('image/jpeg', 0.7);
+      URL.revokeObjectURL(objectUrl);
+
       const tempId = `temp_${Date.now()}`;
-      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, image: reader.result, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), seenBy: [myHandle] };
+      const tempMsg = {
+        _id: tempId, room: activeRoom.name, author: myHandle,
+        image: compressed,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        seenBy: [myHandle]
+      };
       setChatHistory(prev => [...prev, tempMsg]);
       socketRef.current.emit("send_message", { ...tempMsg, tempId });
     };
-    reader.readAsDataURL(file);
+    img.src = objectUrl;
   };
 
   const handleVideoUpload = async (e) => {
