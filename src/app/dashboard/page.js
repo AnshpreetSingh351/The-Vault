@@ -162,6 +162,15 @@ export default function ChatDashboard() {
     setMyHandle(savedName);
     const savedTheme = localStorage.getItem("vault_theme");
     if (savedTheme === "dark") setIsDarkMode(true);
+
+    // Disconnect any old socket on fresh login so it reconnects cleanly
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    // Reset chat state on fresh login
+    setChatHistory([]);
+    setActiveRoom({ name: "General Vibes #1" });
   }, [router]);
 
   useEffect(() => {
@@ -189,7 +198,10 @@ export default function ChatDashboard() {
     loadRooms();
     setUnreadRooms(prev => { const next = new Set(prev); next.delete(activeRoom.name); return next; });
 
-    if (!socketRef.current) socketRef.current = io(API);
+    // Always create a fresh socket connection
+    if (!socketRef.current || !socketRef.current.connected) {
+      socketRef.current = io(API, { forceNew: true });
+    }
     const socket = socketRef.current;
     socket.emit('join_vault', { handle: myHandle, room: activeRoom.name });
 
@@ -240,7 +252,11 @@ export default function ChatDashboard() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
 
-  const handleExit = () => { localStorage.removeItem("vault_user"); router.push("/"); };
+  const handleExit = () => {
+    localStorage.removeItem("vault_user");
+    if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
+    router.push("/");
+  };
 
   const handleTyping = () => {
     if (!socketRef.current) return;
