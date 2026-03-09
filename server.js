@@ -73,6 +73,17 @@ app.delete('/api/rooms/:name', async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Delete failed" }); }
 });
 
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const existing = await User.findOne({ username });
+    if (existing) return res.status(400).json({ error: "Username already taken!" });
+    const newUser = new User({ username, password });
+    await newUser.save();
+    res.status(201).json({ message: "Account created!" });
+  } catch (err) { res.status(500).json({ error: "DB Error" }); }
+});
+
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -81,7 +92,6 @@ app.post('/api/login', async (req, res) => {
     res.status(200).json({ message: "Welcome back!" });
   } catch (err) { res.status(500).json({ error: "DB Error" }); }
 });
-
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const messages = await Message.find({ room: req.params.room }).sort({ createdAt: 1 }).limit(50);
