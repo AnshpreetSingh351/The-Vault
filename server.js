@@ -15,7 +15,10 @@ cloudinary.config({
 });
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost"],
+  methods: ["GET", "POST", "PUT", "DELETE"]
+}));
 app.use(express.json({ limit: '50mb' }));
 
 const upload = multer({
@@ -51,7 +54,10 @@ const Message = mongoose.model('Message', new mongoose.Schema({
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: process.env.FRONTEND_URL || "http://localhost:3000" },
+  cors: {
+    origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost"],
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  },
   maxHttpBufferSize: 5e7
 });
 

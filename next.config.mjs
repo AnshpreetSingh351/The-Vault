@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // 🚀 This creates the 'out' folder Render needs
-  images: {
-    unoptimized: true, // Required for static export images
-  },
+  output: 'export',
+  distDir: 'out',
+  images: { unoptimized: true },
 };
 
 export default nextConfig;
