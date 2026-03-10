@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">the-vault</string>
+    <string name="title_activity_main">the-vault</string>
+    <string name="package_name">com.thevault.app</string>
+    <string name="custom_url_scheme">com.thevault.app</string>
+</resources>

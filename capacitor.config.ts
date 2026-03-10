@@ -1,9 +1,9 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.thevault.app',
-  appName: 'the-vault',
-  webDir: 'public'
+  appName: 'The Vault',
+  webDir: 'out',
 };
 
 export default config;
