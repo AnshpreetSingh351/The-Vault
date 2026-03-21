@@ -86,7 +86,7 @@ export default function IdentityPage() {
   const [focusedField, setFocusedField] = useState(null);
   const [unlocking, setUnlocking] = useState(false);
 
-  const vaultTitle = useGlitchText("THE VAULT", glitchActive);
+  const vaultTitle = useGlitchText("BetterSide", glitchActive);
 
   useEffect(() => {
     setMounted(true);
