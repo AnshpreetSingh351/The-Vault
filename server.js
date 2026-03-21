@@ -16,8 +16,9 @@ cloudinary.config({
 
 const app = express();
 app.use(cors({
-  origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost"],
-  methods: ["GET", "POST", "PUT", "DELETE"]
+  origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-1.onrender.com"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
 
@@ -55,8 +56,9 @@ const Message = mongoose.model('Message', new mongoose.Schema({
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost"],
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-1.onrender.com"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   },
   maxHttpBufferSize: 5e7
 });
