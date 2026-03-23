@@ -7,12 +7,19 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
+const webpush = require('web-push');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+webpush.setVapidDetails(
+  `mailto:${process.env.VAPID_EMAIL}`,
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
 const app = express();
 app.use(cors({
@@ -53,6 +60,11 @@ const Message = mongoose.model('Message', new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }));
 
+const Subscription = mongoose.model('Subscription', new mongoose.Schema({
+  handle: { type: String, unique: true },
+  subscription: Object,
+}));
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -66,7 +78,6 @@ const io = new Server(server, {
 const activeUsers = {};
 const userRooms = {};
 
-// Upload IMAGE to Cloudinary via HTTP (not socket)
 app.post('/api/upload/image', upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   const uploadStream = cloudinary.uploader.upload_stream(
@@ -79,7 +90,6 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
   streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
 });
 
-// Upload VIDEO to Cloudinary via HTTP
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
   const uploadStream = cloudinary.uploader.upload_stream(
@@ -90,6 +100,25 @@ app.post('/api/upload/video', upload.single('video'), (req, res) => {
     }
   );
   streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+});
+
+// ── PUSH NOTIFICATION ROUTES ──
+app.get('/api/vapid-public-key', (req, res) => {
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/subscribe', async (req, res) => {
+  try {
+    const { handle, subscription } = req.body;
+    await Subscription.findOneAndUpdate(
+      { handle },
+      { handle, subscription },
+      { upsert: true, new: true }
+    );
+    res.json({ message: 'Subscribed!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Subscription failed' });
+  }
 });
 
 app.get('/api/rooms', async (req, res) => {
@@ -215,6 +244,29 @@ io.on('connection', (socket) => {
         const updated = await Message.findById(savedMsg._id);
         io.to(data.room).emit('message_seen_update', { _id: updated._id, seenBy: updated.seenBy });
       }
+
+      // ── SEND PUSH NOTIFICATIONS ──
+      const subscribers = await Subscription.find({ handle: { $ne: data.author } });
+      const notifPayload = JSON.stringify({
+        title: `@${data.author} in ${data.room}`,
+        body: data.text
+          ? (data.text.length > 80 ? data.text.substring(0, 80) + '...' : data.text)
+          : data.image ? '📷 Sent an image'
+          : data.video ? '🎥 Sent a video'
+          : 'New message',
+        url: '/dashboard',
+      });
+
+      for (const sub of subscribers) {
+        try {
+          await webpush.sendNotification(sub.subscription, notifPayload);
+        } catch (err) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await Subscription.deleteOne({ handle: sub.handle });
+          }
+        }
+      }
+
     } catch (err) { console.error("❌ SAVE ERROR:", err); }
   });
 
