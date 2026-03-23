@@ -252,7 +252,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
 
       <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-        {/* Top status bar */}
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
           style={{ padding: '14px 14px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.green, boxShadow: `0 0 8px ${T.green}` }} />
@@ -260,7 +259,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.green, boxShadow: `0 0 8px ${T.green}` }} />
         </motion.div>
 
-        {/* Glitch title */}
         <div style={{ textAlign: 'center', padding: '10px 14px 14px' }}>
           <motion.h1 style={{
             fontSize: 'clamp(26px, 5vw, 32px)', fontWeight: 900, letterSpacing: '0.12em', margin: 0, lineHeight: 1,
@@ -276,7 +274,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
           </motion.div>
         </div>
 
-        {/* Identity card */}
         <div style={{ padding: '0 14px 14px' }}>
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
             style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 4, padding: '16px 14px 14px', position: 'relative', boxShadow: `0 0 30px rgba(${T.accentRaw},0.06), inset 0 1px 0 rgba(255,255,255,0.04)`, backdropFilter: 'blur(12px)' }}>
@@ -302,7 +299,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
           </motion.div>
         </div>
 
-        {/* Rooms list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px' }}>
           <motion.button whileTap={{ scale: 0.97 }} onClick={() => { onCreateClick(); onClose?.(); }}
             style={{ width: '100%', padding: '10px 12px', marginBottom: 12, background: 'transparent', border: `1px dashed rgba(${T.accentRaw},0.35)`, borderRadius: 4, color: T.accent, fontFamily: MONO, fontWeight: 700, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
@@ -345,7 +341,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
             );
           })}
 
-          {/* Online users */}
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
             <p style={{ fontSize: 9, letterSpacing: '0.22em', color: T.textDim, textTransform: 'uppercase', marginBottom: 10, fontWeight: 700 }}>// ONLINE [{onlineUsers.length}]</p>
             {onlineUsers.map((user, i) => (
@@ -357,7 +352,6 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
           </div>
         </div>
 
-        {/* Bottom status */}
         <div style={{ padding: '10px 14px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14 }}>
           {['SECURE', 'E2E', 'PRIVATE'].map((label, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -428,6 +422,35 @@ export default function ChatDashboard() {
     setIsDark(localStorage.getItem("vault_theme") !== "light");
   }, [router]);
 
+  // ─── PUSH NOTIFICATION REGISTRATION ───────────────────────────────────────
+  useEffect(() => {
+    if (!myHandle || typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    const registerPush = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+        const res = await fetch(`${API}/api/vapid-public-key`);
+        const { publicKey } = await res.json();
+        const subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: publicKey,
+        });
+        await fetch(`${API}/api/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ handle: myHandle, subscription }),
+        });
+      } catch (err) {
+        console.error('Push registration failed:', err);
+      }
+    };
+
+    registerPush();
+  }, [myHandle]);
+
   // Socket: persistent event listeners
   useEffect(() => {
     if (!myHandle) return;
@@ -459,7 +482,6 @@ export default function ChatDashboard() {
   useEffect(() => {
     if (!myHandle) return;
 
-    // Glitch room title on switch
     setHeaderGlitch(true);
     setTimeout(() => setHeaderGlitch(false), 900);
 
@@ -497,7 +519,6 @@ export default function ChatDashboard() {
 
     const onMsg = (data) => {
       if (data.room === activeRoom.name) {
-        // ✅ FIX: Deduplicate by _id to prevent double messages
         setChatHistory(p => p.some(m => m._id === data._id) ? p : [...p, data]);
         s.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
         if (data.author !== myHandle) playNotification();
@@ -611,14 +632,12 @@ export default function ChatDashboard() {
     socketRef.current?.emit("react_message", { messageId: id, emoji, handle: myHandle, room: activeRoom.name });
   };
 
-  // ✅ IMAGE UPLOAD — uses HTTP upload to Cloudinary, then emits WITHOUT _id
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
     setUploadingImage(true);
     try {
-      // Compress image before upload
       const blob = await new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
@@ -636,7 +655,6 @@ export default function ChatDashboard() {
         img.src = url;
       });
 
-      // Upload to Cloudinary via backend
       const fd = new FormData();
       fd.append('image', blob, 'image.jpg');
       const res = await fetch(`${API}/api/upload/image`, { method: 'POST', body: fd });
@@ -646,27 +664,11 @@ export default function ChatDashboard() {
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const tempId = `temp_${Date.now()}`;
 
-      // Add optimistic message locally
-      const tempMsg = {
-        _id: tempId,
-        room: activeRoom.name,
-        author: myHandle,
-        image: json.url,
-        time,
-        seenBy: [myHandle],
-      };
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, image: json.url, time, seenBy: [myHandle] };
       setChatHistory(p => [...p, tempMsg]);
 
-      // ✅ CRITICAL FIX: Do NOT include _id in emit — server creates its own MongoDB _id
-      // Including _id caused receiver to get undefined image because Mongoose rejected the temp id
       socketRef.current.emit("send_message", {
-        room: activeRoom.name,
-        author: myHandle,
-        image: json.url,   // ✅ Cloudinary URL — not base64, works on all devices
-        time,
-        seenBy: [myHandle],
-        tempId,            // ✅ tempId separate so server can confirm back
-        // NOTE: NO _id field here!
+        room: activeRoom.name, author: myHandle, image: json.url, time, seenBy: [myHandle], tempId,
       });
     } catch (err) {
       alert("Image upload failed: " + err.message);
@@ -675,7 +677,6 @@ export default function ChatDashboard() {
     }
   };
 
-  // ✅ VIDEO UPLOAD — same pattern as image, no _id in emit
   const handleVideoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -691,25 +692,11 @@ export default function ChatDashboard() {
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const tempId = `temp_${Date.now()}`;
 
-      const tempMsg = {
-        _id: tempId,
-        room: activeRoom.name,
-        author: myHandle,
-        video: url,
-        time,
-        seenBy: [myHandle],
-      };
+      const tempMsg = { _id: tempId, room: activeRoom.name, author: myHandle, video: url, time, seenBy: [myHandle] };
       setChatHistory(p => [...p, tempMsg]);
 
-      // ✅ CRITICAL FIX: No _id in emit
       socketRef.current.emit("send_message", {
-        room: activeRoom.name,
-        author: myHandle,
-        video: url,        // ✅ Cloudinary URL
-        time,
-        seenBy: [myHandle],
-        tempId,
-        // NOTE: NO _id field here!
+        room: activeRoom.name, author: myHandle, video: url, time, seenBy: [myHandle], tempId,
       });
     } catch {
       alert("Video upload failed.");
@@ -724,13 +711,7 @@ export default function ChatDashboard() {
     const tempId = `temp_${Date.now()}`;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setChatHistory(p => [...p, { _id: tempId, room: activeRoom.name, author: myHandle, text: message, time, seenBy: [myHandle] }]);
-    socketRef.current.emit("send_message", {
-      room: activeRoom.name,
-      author: myHandle,
-      text: message,
-      time,
-      tempId,
-    });
+    socketRef.current.emit("send_message", { room: activeRoom.name, author: myHandle, text: message, time, tempId });
     setMessage("");
   };
 
@@ -757,7 +738,6 @@ export default function ChatDashboard() {
     isDark, myHandle, onlineUsers, unreadRooms, T,
   };
 
-  // Modal input field
   const ModalField = ({ label, placeholder, type = "text", value, onChange, onKeyDown, autoFocus }) => {
     const [foc, setFoc] = useState(false);
     return (
@@ -798,9 +778,7 @@ export default function ChatDashboard() {
               <ScanLine T={T} />
               <Noise />
               <Corners T={T} size={24} offset={14} />
-
               <div style={{ position: 'relative', zIndex: 10 }}>
-                {/* Modal title */}
                 <div style={{ textAlign: 'center', marginBottom: 28 }}>
                   <motion.h1 style={{
                     fontSize: 'clamp(28px, 8vw, 42px)', fontWeight: 900, letterSpacing: '0.12em', margin: 0, lineHeight: 1, fontFamily: MONO,
@@ -817,13 +795,10 @@ export default function ChatDashboard() {
                     <div style={{ flex: 1, maxWidth: 50, height: 1, background: `linear-gradient(90deg, rgba(${T.accentRaw},0.5), transparent)` }} />
                   </div>
                 </div>
-
-                {/* Modal panel */}
                 <div style={{ background: T.cardBg, border: `1px solid ${roomToDelete ? `rgba(${T.redRaw},0.3)` : T.border}`, borderRadius: 4, padding: '28px 24px', backdropFilter: 'blur(20px)', position: 'relative', boxShadow: `0 0 60px rgba(${T.accentRaw},0.08), inset 0 1px 0 rgba(255,255,255,0.05)` }}>
                   <div style={{ position: 'absolute', top: -10, left: 16, background: T.bg, padding: '0 8px', fontSize: 9, letterSpacing: '0.2em', color: roomToDelete ? T.red : `rgba(${T.accentRaw},0.7)`, textTransform: 'uppercase', fontWeight: 700, fontFamily: MONO }}>
                     {roomToDelete ? 'CONFIRM DESTRUCTION' : showCreateModal ? 'SPACE CONFIGURATION' : 'IDENTITY VERIFICATION'}
                   </div>
-
                   {showCreateModal && (
                     <ModalField label="// SPACE NAME" placeholder="channel-name..."
                       value={newRoomData.name} onChange={e => setNewRoomData({ ...newRoomData, name: e.target.value })} />
@@ -837,13 +812,11 @@ export default function ChatDashboard() {
                     onKeyDown={e => e.key === 'Enter' && (roomToDelete ? confirmDeleteRoom() : showCreateModal ? handleCreateRoom() : verifyPassword())}
                     autoFocus={!showCreateModal}
                   />
-
                   <motion.button whileTap={{ scale: 0.98 }}
                     onClick={roomToDelete ? confirmDeleteRoom : showCreateModal ? handleCreateRoom : verifyPassword}
                     style={{ width: '100%', padding: '13px', background: roomToDelete ? `linear-gradient(135deg, rgba(${T.redRaw},0.9), rgba(${T.redRaw},0.7))` : T.accentGrad, border: `1px solid ${roomToDelete ? `rgba(${T.redRaw},0.5)` : `rgba(${T.accentRaw},0.5)`}`, borderRadius: 4, color: 'white', fontWeight: 800, fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: MONO, boxShadow: `0 0 20px rgba(${roomToDelete ? T.redRaw : T.accentRaw},0.2)` }}>
                     {roomToDelete ? 'DESTROY SPACE' : showCreateModal ? 'CREATE_SPACE()' : 'GRANT_ACCESS()'}
                   </motion.button>
-
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
                     <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
                     <button onClick={() => { setShowCreateModal(false); setRoomToJoin(null); setRoomToDelete(null); setDeletePassword(""); }}
@@ -853,8 +826,6 @@ export default function ChatDashboard() {
                     <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
                   </div>
                 </div>
-
-                {/* Bottom dots */}
                 <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
                   {['E2E ENCRYPTED', 'NO LOGS', 'PRIVATE'].map((label, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -900,7 +871,6 @@ export default function ChatDashboard() {
       {/* ── MAIN CHAT AREA ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, position: 'relative' }}>
 
-        {/* Animated background */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
           <VaultRings T={T} />
           <ScanLine T={T} />
@@ -917,23 +887,19 @@ export default function ChatDashboard() {
           flexShrink: 0, position: 'relative', zIndex: 10,
           boxShadow: `inset 0 -1px 0 rgba(${T.accentRaw},0.1)`,
         }}>
-          {/* Floating label */}
           <div style={{ position: 'absolute', bottom: -10, left: '50%', transform: 'translateX(-50%)', background: T.cardBg, padding: '0 8px', fontSize: 9, letterSpacing: '0.2em', color: `rgba(${T.accentRaw},0.5)`, textTransform: 'uppercase', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: MONO }}>
             TRANSMISSION CHANNEL
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            {/* Mobile menu button */}
             <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSidebarOpen(true)} className="md:hidden"
               style={{ width: 34, height: 34, flexShrink: 0, background: T.inputBg, border: `1px solid ${T.border}`, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: 'pointer', color: T.text }}>☰</motion.button>
 
-            {/* Radar dot */}
             <div style={{ flexShrink: 0, position: 'relative', width: 10, height: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green, boxShadow: `0 0 8px ${T.green}`, position: 'absolute', top: 1, left: 1 }} />
               <div style={{ position: 'absolute', inset: -2, borderRadius: '50%', border: `1px solid ${T.green}`, animation: 'radar 2s infinite' }} />
             </div>
 
-            {/* Room name with glitch */}
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 8, letterSpacing: '0.22em', color: T.textDim, textTransform: 'uppercase', lineHeight: 1, marginBottom: 3, fontWeight: 700 }}>// ACTIVE CHANNEL</p>
               <h1 style={{
@@ -945,7 +911,6 @@ export default function ChatDashboard() {
             </div>
           </div>
 
-          {/* Header buttons */}
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSoundEnabled(p => !p)}
               style={{ height: 30, width: 30, background: T.inputBg, border: `1px solid ${T.border}`, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, cursor: 'pointer' }}>
@@ -995,10 +960,8 @@ export default function ChatDashboard() {
                         backdropFilter: 'blur(8px)',
                         position: 'relative', overflow: 'hidden',
                       }}>
-                        {/* Gloss line on my bubbles */}
                         {isMe && <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: 1, background: 'rgba(255,255,255,0.2)' }} />}
 
-                        {/* Hover toolbar */}
                         <div className="msg-toolbar" style={{
                           position: 'absolute', top: -38, right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0,
                           display: 'flex', alignItems: 'center', gap: 3,
@@ -1023,16 +986,13 @@ export default function ChatDashboard() {
                           </>)}
                         </div>
 
-                        {/* Image */}
                         {msg.image && (
                           <img src={msg.image} alt="img" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 4, marginBottom: msg.text ? 8 : 0, display: 'block', border: `1px solid rgba(${T.accentRaw},0.2)` }} />
                         )}
-                        {/* Video */}
                         {msg.video && (
                           <video src={msg.video} controls style={{ width: '100%', maxHeight: 220, borderRadius: 4, marginBottom: msg.text ? 8 : 0, display: 'block', background: '#000' }} />
                         )}
 
-                        {/* Edit mode */}
                         {editingId === msg._id ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <input
@@ -1057,7 +1017,6 @@ export default function ChatDashboard() {
                               <MessageTicks status={getTickStatus(msg, myHandle)} T={T} />
                             </div>
                           )}
-                          {/* Reactions */}
                           {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
                               {Object.entries(msg.reactions).map(([emoji, users]) => (
@@ -1079,7 +1038,6 @@ export default function ChatDashboard() {
             })}
           </AnimatePresence>
 
-          {/* Typing indicator */}
           {typingStatus && (
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, paddingLeft: 36 }}>
@@ -1102,12 +1060,10 @@ export default function ChatDashboard() {
           transition: 'border-color 0.2s',
           boxShadow: `0 0 40px rgba(${T.accentRaw},0.05)`,
         }}>
-          {/* TRANSMIT floating label */}
           <div style={{ position: 'absolute', top: -10, left: 16, background: T.cardBg, padding: '0 8px', fontSize: 9, letterSpacing: '0.2em', color: `rgba(${T.accentRaw},0.6)`, textTransform: 'uppercase', fontWeight: 700, fontFamily: MONO }}>
             TRANSMIT
           </div>
 
-          {/* Emoji picker */}
           <AnimatePresence>
             {showEmojiPicker && (
               <motion.div ref={emojiPickerRef}
@@ -1124,7 +1080,6 @@ export default function ChatDashboard() {
             )}
           </AnimatePresence>
 
-          {/* Upload progress */}
           {(uploadingVideo || uploadingImage) && (
             <div style={{ margin: '8px 10px 0', padding: '6px 12px', background: `rgba(${T.accentRaw},0.08)`, border: `1px solid rgba(${T.accentRaw},0.2)`, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
               <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 0.8, repeat: Infinity }}
@@ -1139,7 +1094,6 @@ export default function ChatDashboard() {
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
             <input type="file" ref={videoInputRef} onChange={handleVideoUpload} className="hidden" accept="video/*" />
 
-            {/* Action buttons */}
             {[
               { icon: '📷', action: () => fileInputRef.current?.click(), disabled: uploadingImage },
               { icon: '🎥', action: () => videoInputRef.current?.click(), disabled: uploadingVideo },
@@ -1151,7 +1105,6 @@ export default function ChatDashboard() {
               </motion.button>
             ))}
 
-            {/* Text input */}
             <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
               <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontFamily: MONO, fontSize: 13, color: T.accent, pointerEvents: 'none', opacity: inputFocused || message ? 1 : 0.3, transition: 'opacity 0.2s', zIndex: 1 }}>›</span>
               <input type="text" value={message}
@@ -1166,7 +1119,6 @@ export default function ChatDashboard() {
                 style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, transformOrigin: 'left', background: `linear-gradient(90deg, ${T.accent}, rgba(${T.greenRaw},0.4))` }} />
             </div>
 
-            {/* Send button */}
             <motion.button whileTap={{ scale: 0.88 }} onClick={sendMessage}
               style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 4, cursor: 'pointer', transition: 'all 0.2s', background: message.trim() ? T.accentGrad : T.inputBg, border: `1px solid ${message.trim() ? `rgba(${T.accentRaw},0.5)` : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: message.trim() ? `0 0 16px rgba(${T.accentRaw},0.3)` : 'none' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
