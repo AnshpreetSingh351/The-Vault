@@ -23,7 +23,7 @@ webpush.setVapidDetails(
 
 const app = express();
 app.use(cors({
-  origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-1.onrender.com"],
+  origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-z6id.onrender.com"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
@@ -68,7 +68,7 @@ const Subscription = mongoose.model('Subscription', new mongoose.Schema({
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-1.onrender.com"],
+    origin: ["http://localhost:3000", "capacitor://localhost", "http://localhost", "https://the-vault-z6id.onrender.com"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   },
