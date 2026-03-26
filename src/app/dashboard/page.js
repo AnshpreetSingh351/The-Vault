@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { io } from 'socket.io-client';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -368,6 +368,7 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
 // ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
 export default function ChatDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const socketRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -420,7 +421,9 @@ export default function ChatDashboard() {
     if (!name) { router.replace('/'); return; }
     setMyHandle(name);
     setIsDark(localStorage.getItem("vault_theme") !== "light");
-  }, [router]);
+    const roomFromNotification = searchParams.get('room');
+    if (roomFromNotification) setActiveRoom({ name: roomFromNotification });
+  }, [router, searchParams]);
 
   // ─── PUSH NOTIFICATION REGISTRATION ───────────────────────────────────────
   useEffect(() => {

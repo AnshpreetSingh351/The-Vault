@@ -246,20 +246,20 @@ io.on('connection', (socket) => {
       }
 
       // ── SEND PUSH NOTIFICATIONS ──
-      const subscribers = await Subscription.find({ handle: { $ne: data.author } });
-      const notifPayload = JSON.stringify({
-        title: `@${data.author} in ${data.room}`,
-        body: data.text
-          ? (data.text.length > 80 ? data.text.substring(0, 80) + '...' : data.text)
-          : data.image ? '📷 Sent an image'
-          : data.video ? '🎥 Sent a video'
-          : 'New message',
-        url: '/dashboard',
+      // Only notify users who are NOT currently online (offline users miss socket events)
+      const onlineHandles = new Set(Object.values(activeUsers));
+      const subscribers = await Subscription.find({
+        handle: { $nin: [...onlineHandles] },
+      });
+      const notificationPayload = JSON.stringify({
+        title: 'The Vault — New Message',
+        body: `You have a new message in #${data.room}. Tap to read.`,
+        url: `/dashboard?room=${encodeURIComponent(data.room)}`,
       });
 
       for (const sub of subscribers) {
         try {
-          await webpush.sendNotification(sub.subscription, notifPayload);
+          await webpush.sendNotification(sub.subscription, notificationPayload);
         } catch (err) {
           if (err.statusCode === 410 || err.statusCode === 404) {
             await Subscription.deleteOne({ handle: sub.handle });
