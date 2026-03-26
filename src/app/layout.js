@@ -13,7 +13,17 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "The Vault",
-  description: "Private chat app",
+  description: "Private encrypted chat",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "The Vault",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
 };
 
 export const viewport = {

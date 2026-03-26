@@ -1,10 +1,14 @@
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', () => {});
+
 self.addEventListener('push', (event) => {
   const data = event.data?.json() || {};
   const title = data.title || 'New Message — The Vault';
   const options = {
     body: data.body || 'You have a new message',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     vibrate: [200, 100, 200],
     data: { url: data.url || '/dashboard' },
   };
