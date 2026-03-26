@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io } from 'socket.io-client';
 
@@ -368,7 +368,7 @@ function Sidebar({ rooms, activeRoom, onJoin, onDelete, onCreateClick, onClose, 
 }
 
 // ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
-export default function ChatDashboard() {
+function ChatDashboardInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const socketRef = useRef(null);
@@ -1162,5 +1162,13 @@ export default function ChatDashboard() {
         .sidebar-room-group:hover .room-delete-btn { opacity: 1 !important; }
       `}</style>
     </main>
+  );
+}
+
+export default function ChatDashboard() {
+  return (
+    <Suspense fallback={<div style={{ height: '100dvh', background: '#050508' }} />}>
+      <ChatDashboardInner />
+    </Suspense>
   );
 }
