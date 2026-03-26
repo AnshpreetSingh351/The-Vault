@@ -374,6 +374,7 @@ function ChatDashboardInner() {
   const socketRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const pendingJoinRoom = useRef(null);
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -424,7 +425,7 @@ function ChatDashboardInner() {
     setMyHandle(name);
     setIsDark(localStorage.getItem("vault_theme") !== "light");
     const roomFromNotification = searchParams.get('room');
-    if (roomFromNotification) setActiveRoom({ name: roomFromNotification });
+    if (roomFromNotification) pendingJoinRoom.current = roomFromNotification;
   }, [router, searchParams]);
 
   // ─── PUSH NOTIFICATION REGISTRATION ───────────────────────────────────────
@@ -514,10 +515,16 @@ function ChatDashboardInner() {
       try {
         const res = await fetch(`${API}/api/rooms`);
         const data = await res.json();
-        setRooms([
+        const allRooms = [
           { name: "General Vibes #1", password: "" },
           ...(Array.isArray(data) ? data : []).filter(r => r.name !== "General Vibes #1")
-        ]);
+        ];
+        setRooms(allRooms);
+        if (pendingJoinRoom.current) {
+          const target = allRooms.find(r => r.name === pendingJoinRoom.current);
+          pendingJoinRoom.current = null;
+          if (target) attemptJoin(target);
+        }
       } catch {
         setRooms([{ name: "General Vibes #1", password: "" }]);
       }
