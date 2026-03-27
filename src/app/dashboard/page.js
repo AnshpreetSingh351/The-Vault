@@ -566,6 +566,41 @@ function ChatDashboardInner() {
     };
   }, [myHandle, activeRoom.name]);
 
+  // ─── AUTO-REFRESH ON PAGE VISIBILITY CHANGE (for bookmark returns) ───────
+  useEffect(() => {
+    if (!myHandle || !activeRoom.name) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        // User returned to the app - refresh messages
+        try {
+          const res = await fetch(`${API}/api/messages/${encodeURIComponent(activeRoom.name)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setChatHistory(data);
+            // Mark messages as seen
+            if (socketRef.current) {
+              socketRef.current.emit('mark_seen', { room: activeRoom.name, handle: myHandle });
+            }
+          }
+        } catch (err) {
+          console.error('Failed to refresh messages:', err);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also listen for focus event (for iOS/Android apps)
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [myHandle, activeRoom.name]);
+
   // Auto scroll to bottom
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
